@@ -21,29 +21,72 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
 endif()
 
 # Used as public API to be included into other projects
+# NOTE: raylib.h internally #includes raylib_core.h, raylib_shapes.h, raylib_textures.h,
+# raylib_text.h, raylib_audio.h, and config.h (raylib_models.h is conditional and
+# disabled via SUPPORT_MODULE_RMODELS=0). rlgl.h is self-contained (batch types +
+# immediate-mode declarations; candidate 4 removed the internal/ include).
+# All of these must be present in bin/include so AI-authored game.c files can compile
+# with only -I<bin/include>.
 set(raylib_public_headers
     raylib.h
-    rcamera.h
+    raylib_core.h
+    raylib_shapes.h
+    raylib_textures.h
+    raylib_text.h
+    raylib_audio.h
     rlgl.h
     raymath.h
+    config.h
+    raylib_ai_adapter.h
+    raylib_ai_input.h
+    raylib_observability.h
     )
 
 # Sources to be compiled
 set(raylib_sources
     rcore.c
+    rcore_fs.c
+    rcore_input.c
+    rlgl.c
+    raymath.c
     rshapes.c
     rtext.c
+    cjk_font_data.c
     rtextures.c
     )
+
+# Platform backend files (separate compilation units)
+# NOTE: Only the platform matching the target is compiled. Web backend was removed
+# (spec: Windows is the official platform; Android adapter code is kept).
+if (${PLATFORM} STREQUAL "Desktop")
+    list(APPEND raylib_sources platform_glfw.c)
+elseif (${PLATFORM} STREQUAL "Android")
+    list(APPEND raylib_sources platform_android.c)
+endif()
 
 # Only build raudio if it's enabled
 if (NOT DEFINED SUPPORT_MODULE_RAUDIO OR SUPPORT_MODULE_RAUDIO)
     list(APPEND raylib_sources raudio.c)
 endif()
 
-# Only build rmodels if it's enabled
-if (NOT DEFINED SUPPORT_MODULE_RMODELS OR SUPPORT_MODULE_RMODELS)
-    list(APPEND raylib_sources rmodels.c)
+# Only build the AI adapter if it's enabled
+# NOTE: Uses the same check pattern as SUPPORT_MODULE_RAUDIO - defaults to ON when
+# CUSTOMIZE_BUILD=OFF (CMake variable not defined, but config.h defines it as 1).
+if (NOT DEFINED SUPPORT_MODULE_AI_ADAPTER OR SUPPORT_MODULE_AI_ADAPTER)
+    list(APPEND raylib_sources raylib_ai_adapter.c)
+
+    # M4 code-comprehensibility refactor: AI adapter split into units
+    list(APPEND raylib_sources ai_audio.c)
+    list(APPEND raylib_sources ai_scene.c)
+    list(APPEND raylib_sources ai_input.c)
+    list(APPEND raylib_sources ai_protocol.c)
+
+    # Platform-specific AI input simulation
+    if (WIN32)
+        list(APPEND raylib_sources raylib_ai_input_win32.c)
+    else()
+        list(APPEND raylib_sources raylib_ai_input_stubs.c)
+    endif()
 endif()
 
 # <root>/cmake/GlfwImport.cmake handles the details around the inclusion of glfw
@@ -62,18 +105,9 @@ else ()
     MESSAGE(STATUS "Audio Backend: miniaudio")
 endif ()
 
-add_library(raylib ${raylib_sources} ${raylib_public_headers})
-
-if (NOT BUILD_SHARED_LIBS)
-    MESSAGE(STATUS "Building raylib static library")
-    add_library(raylib_static ALIAS raylib)
-else()
-    MESSAGE(STATUS "Building raylib shared library")
-    target_compile_definitions(raylib
-                               PRIVATE $<BUILD_INTERFACE:BUILD_LIBTYPE_SHARED>
-                               INTERFACE $<INSTALL_INTERFACE:USE_LIBTYPE_SHARED>
-                               )
-endif()
+add_library(raylib STATIC ${raylib_sources} ${raylib_public_headers})
+MESSAGE(STATUS "Building raylib static library (exe-only engine, no DLL builds)")
+add_library(raylib_static ALIAS raylib)
 
 if (${PLATFORM} MATCHES "Web")
     target_link_options(raylib PUBLIC "-sUSE_GLFW=3" -sEXPORTED_RUNTIME_METHODS=ccall)
@@ -123,8 +157,18 @@ target_include_directories(raylib
                            ${OPENAL_INCLUDE_DIR}
                            )
 
-# Copy the header files to the build directory for convenience
-file(COPY ${raylib_public_headers} DESTINATION "include")
+# MSVC: treat source files as UTF-8 so non-ASCII characters (comments, strings)
+# don't trigger C4819 under non-English code pages (e.g. Chinese locale 936).
+# PUBLIC so examples and downstream consumers inherit the flag.
+if(MSVC)
+    target_compile_options(raylib PUBLIC /utf-8)
+endif()
+
+# Copy the header files to the bin directory for convenience
+# Copy public headers so bin/include is self-contained for AI-authored game.c
+# files compiling with only -I<bin/include> (rlgl.h is self-contained since the
+# batch types moved into it — candidate 4; no internal/ subdirectory needed).
+file(COPY ${raylib_public_headers} DESTINATION "${CMAKE_SOURCE_DIR}/bin/include")
 if (PLATFORM STREQUAL "Desktop")
     if (UNIX AND NOT APPLE)
         if (GLFW_BUILD_X11)
@@ -158,5 +202,3 @@ message(STATUS "  GRAPHICS=" ${GRAPHICS})
 
 # Options if you want to create an installer using CPack
 include(PackConfigurations)
-
-enable_testing()

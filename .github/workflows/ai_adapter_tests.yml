@@ -1,0 +1,36 @@
+name: AI Adapter Tests
+
+on:
+  push:
+    paths:
+      - 'src/**'
+      - 'tests/**'
+      - 'CMakeLists.txt'
+      - 'cmake/**'
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'tests/**'
+      - 'CMakeLists.txt'
+      - 'cmake/**'
+
+permissions:
+  contents: read
+
+jobs:
+  headless:
+    # Headless-safe tests only (no GPU/OpenGL context needed): unit tests +
+    # the AI adapter suite (47 assertions). GPU-labeled tests (test_gpu,
+    # ai_protocol_scenario) need a local desktop and are excluded here.
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure
+        run: cmake -B build -S . -DBUILD_EXAMPLES=OFF
+
+      - name: Build
+        run: cmake --build build --config Debug
+
+      - name: Run headless tests
+        run: ctest --test-dir build -C Debug -LE gpu --output-on-failure

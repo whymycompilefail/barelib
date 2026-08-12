@@ -98,6 +98,9 @@ DerivedData/
 .idea/
 cmake-build-*/
 
+# Local scratch dir used by compile_game.bat (TEMP/TMP redirect)
+temp/
+
 # CMake stuff
 CMakeCache.txt
 CMakeFiles
@@ -123,6 +126,13 @@ zig-out/
 build/
 build-*/
 docgen_tmp/
+
+# In-source build artifacts (Makefile fallback, prefer CMake)
+src/*.o
+src/*.a
+src/*.so
+src/*.dll
+src/*.dll.a
 
 # Tools stuff
 tools/rlparser/rlparser.exe

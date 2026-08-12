@@ -46,10 +46,13 @@
     #define SUPPORT_MODULE_RTEXT        1       // WARNING: It requires SUPPORT_MODULE_RTEXTURES to load sprite font textures
 #endif
 #ifndef SUPPORT_MODULE_RMODELS
-    #define SUPPORT_MODULE_RMODELS      1
+    #define SUPPORT_MODULE_RMODELS      0       // Disabled: no 3D models support
 #endif
 #ifndef SUPPORT_MODULE_RAUDIO
     #define SUPPORT_MODULE_RAUDIO       1
+#endif
+#ifndef SUPPORT_MODULE_AI_ADAPTER
+    #define SUPPORT_MODULE_AI_ADAPTER   1
 #endif
 
 //------------------------------------------------------------------------------------
@@ -62,7 +65,7 @@
 #ifndef SUPPORT_CAMERA_SYSTEM
     // Camera module is included (rcamera.h) and multiple predefined
     // cameras are available: free, 1st/3rd person, orbital
-    #define SUPPORT_CAMERA_SYSTEM           1
+    #define SUPPORT_CAMERA_SYSTEM           0       // Disabled: no camera system (3D module removed)
 #endif
 #ifndef SUPPORT_GESTURES_SYSTEM
     // Gestures module is included (rgestures.h) to support gestures detection: tap, hold, swipe, drag
@@ -105,7 +108,7 @@
 #endif
 #ifndef SUPPORT_AUTOMATION_EVENTS
     // Support automatic generated events, loading and recording of those events when required
-    #define SUPPORT_AUTOMATION_EVENTS       1
+    #define SUPPORT_AUTOMATION_EVENTS       0
 #endif
 #ifndef SUPPORT_CUSTOM_FRAME_CONTROL
     // Support custom frame control, only for advanced users
@@ -125,24 +128,57 @@
 #endif
 
 // rcore: Configuration values
-// NOTE: Below values are already defined inside [rcore.c] so there is no need to be
-// redefined here, in case it must be done, uncomment the required line and update
-// the value; it can also be done on compilation with -DVALUE_TO_REDEFINE=128
+// NOTE: These values were originally defined inside [rcore.c] but are now shared
+// via config.h for platform backends that need them (e.g. CoreData struct in platform.h).
+// They can be overridden on compilation with -DVALUE_TO_REDEFINE=128
 //------------------------------------------------------------------------------------
-//#define MAX_TRACELOG_MSG_LENGTH       256       // Max length of one trace-log message
-//#define MAX_FILEPATH_CAPACITY        8192       // Maximum file paths capacity
-//#define MAX_FILEPATH_LENGTH          4096       // Maximum length for filepaths (Linux PATH_MAX default value)
-//#define MAX_KEYBOARD_KEYS             512       // Maximum number of keyboard keys supported
-//#define MAX_MOUSE_BUTTONS               8       // Maximum number of mouse buttons supported
-//#define MAX_GAMEPADS                    4       // Maximum number of gamepads supported
-//#define MAX_GAMEPAD_AXES                8       // Maximum number of axes supported (per gamepad)
-//#define MAX_GAMEPAD_BUTTONS            32       // Maximum number of buttons supported (per gamepad)
-//#define MAX_GAMEPAD_VIBRATION_TIME      2.0f    // Maximum vibration time in seconds
-//#define MAX_TOUCH_POINTS               10       // Maximum number of touch points supported
-//#define MAX_KEY_PRESSED_QUEUE          16       // Maximum number of keys in the key input queue
-//#define MAX_CHAR_PRESSED_QUEUE         16       // Maximum number of characters in the char input queue
-//#define MAX_DECOMPRESSION_SIZE         64       // Max size allocated for decompression in MB
-//#define MAX_AUTOMATION_EVENTS       16384       // Maximum number of automation events to record
+#ifndef MAX_TRACELOG_MSG_LENGTH
+    #define MAX_TRACELOG_MSG_LENGTH       256       // Max length of one trace-log message
+#endif
+#ifndef MAX_FILEPATH_CAPACITY
+    #define MAX_FILEPATH_CAPACITY        8192       // Maximum file paths capacity
+#endif
+#ifndef MAX_FILEPATH_LENGTH
+    #if defined(_WIN32)
+        #define MAX_FILEPATH_LENGTH       256       // On Win32, MAX_PATH = 260 (limits.h) but Windows 10, Version 1607 enables long paths...
+    #else
+        #define MAX_FILEPATH_LENGTH      4096       // On Linux, PATH_MAX = 4096 by default (limits.h)
+    #endif
+#endif
+#ifndef MAX_KEYBOARD_KEYS
+    #define MAX_KEYBOARD_KEYS             512       // Maximum number of keyboard keys supported
+#endif
+#ifndef MAX_MOUSE_BUTTONS
+    #define MAX_MOUSE_BUTTONS               8       // Maximum number of mouse buttons supported
+#endif
+#ifndef MAX_GAMEPADS
+    #define MAX_GAMEPADS                    4       // Maximum number of gamepads supported
+#endif
+#ifndef MAX_GAMEPAD_NAME_LENGTH
+    #define MAX_GAMEPAD_NAME_LENGTH       128       // Maximum number of characters in a gamepad name (byte size)
+#endif
+#ifndef MAX_GAMEPAD_AXES
+    #define MAX_GAMEPAD_AXES                8       // Maximum number of axes supported (per gamepad)
+#endif
+#ifndef MAX_GAMEPAD_BUTTONS
+    #define MAX_GAMEPAD_BUTTONS            32       // Maximum number of buttons supported (per gamepad)
+#endif
+#ifndef MAX_GAMEPAD_VIBRATION_TIME
+    #define MAX_GAMEPAD_VIBRATION_TIME     2.0f     // Maximum vibration time in seconds
+#endif
+#ifndef MAX_TOUCH_POINTS
+    #define MAX_TOUCH_POINTS                8       // Maximum number of touch points supported
+#endif
+#ifndef MAX_KEY_PRESSED_QUEUE
+    #define MAX_KEY_PRESSED_QUEUE          16       // Maximum number of keys in the key input queue
+#endif
+#ifndef MAX_CHAR_PRESSED_QUEUE
+    #define MAX_CHAR_PRESSED_QUEUE         16       // Maximum number of characters in the char input queue
+#endif
+#ifndef MAX_DECOMPRESSION_SIZE
+    #define MAX_DECOMPRESSION_SIZE         64       // Max size allocated for decompression in MB
+#endif
+
 //------------------------------------------------------------------------------------
 
 //------------------------------------------------------------------------------------
@@ -301,34 +337,30 @@
 #endif
 
 //------------------------------------------------------------------------------------
-// Module: rmodels - Configuration Flags
+// Module: rmodels - Configuration Flags (all disabled)
 //------------------------------------------------------------------------------------
-// Selected desired model fileformats to be supported for loading
 #ifndef SUPPORT_FILEFORMAT_OBJ
-    #define SUPPORT_FILEFORMAT_OBJ      1
+    #define SUPPORT_FILEFORMAT_OBJ      0
 #endif
 #ifndef SUPPORT_FILEFORMAT_MTL
-    #define SUPPORT_FILEFORMAT_MTL      1
+    #define SUPPORT_FILEFORMAT_MTL      0
 #endif
 #ifndef SUPPORT_FILEFORMAT_IQM
-    #define SUPPORT_FILEFORMAT_IQM      1
+    #define SUPPORT_FILEFORMAT_IQM      0
 #endif
 #ifndef SUPPORT_FILEFORMAT_GLTF
-    #define SUPPORT_FILEFORMAT_GLTF     1
+    #define SUPPORT_FILEFORMAT_GLTF     0
 #endif
 #ifndef SUPPORT_FILEFORMAT_VOX
-    #define SUPPORT_FILEFORMAT_VOX      1
+    #define SUPPORT_FILEFORMAT_VOX      0
 #endif
 #ifndef SUPPORT_FILEFORMAT_M3D
-    #define SUPPORT_FILEFORMAT_M3D      1
+    #define SUPPORT_FILEFORMAT_M3D      0
 #endif
 #ifndef SUPPORT_MESH_GENERATION
-    // Support procedural mesh generation functions, uses external par_shapes.h library
-    // NOTE: Some generated meshes DO NOT include generated texture coordinates
-    #define SUPPORT_MESH_GENERATION     1
+    #define SUPPORT_MESH_GENERATION     0
 #endif
 #ifndef SUPPORT_GPU_SKINNING
-    // GPU skinning disabled by default, some GPUs do not support more than 8 VBOs
     #define SUPPORT_GPU_SKINNING        0
 #endif
 

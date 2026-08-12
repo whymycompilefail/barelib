@@ -1,0 +1,9 @@
+<<AI_STATE_BEGIN>>
+{
+    "device": {"ready": true, "masterVolume": 1.000},
+    "activeBuffers": [
+        {"usage": "STREAM", "playing": true, "paused": false, "looping": true, "volume": 0.350, "pitch": 1.000, "pan": 0.000, "progress": 0.000}
+    ],
+    "bufferCount": 1
+}
+<<AI_STATE_END>>

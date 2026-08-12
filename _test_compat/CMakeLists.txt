@@ -1,0 +1,7 @@
+cmake_minimum_required(VERSION 3.22)
+project(test_compat)
+set(CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake)
+list(APPEND CMAKE_PREFIX_PATH ${CMAKE_SOURCE_DIR}/build/raylib/Release)
+find_package(raylib REQUIRED)
+add_executable(test_compat ${CMAKE_SOURCE_DIR}/examples/core/core_basic_window.c)
+target_link_libraries(test_compat raylib)

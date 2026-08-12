@@ -28,6 +28,16 @@ include(CompilerFlags)
 # Registers build options that are exposed to cmake
 include(CMakeOptions.txt)
 
+# ============================================================================
+# Output directory configuration
+# All compile outputs (lib, exe) go to bin/<config>/ for easy access
+# This flattens VS generator's default deep nesting (e.g. bin/raylib/Release/ → bin/Release/)
+# ============================================================================
+set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/bin")
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/bin")
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/bin")
+message(STATUS "Output directory: ${CMAKE_SOURCE_DIR}/bin/<CONFIG>")
+
 if (UNIX AND NOT APPLE AND NOT "${PLATFORM}" MATCHES "DRM" AND NOT "${PLATFORM}" MATCHES "Web" AND NOT "${PLATFORM}" MATCHES "SDL")
   if (NOT GLFW_BUILD_WAYLAND AND NOT GLFW_BUILD_X11)
     message(FATAL_ERROR "Cannot disable both Wayland and X11")
@@ -55,3 +65,6 @@ if (${BUILD_EXAMPLES})
 endif()
 
 enable_testing()
+
+# Test targets (independent test executables)
+add_subdirectory(tests)

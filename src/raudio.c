@@ -176,6 +176,10 @@ typedef struct tagBITMAPINFOHEADER {
 #include "external/miniaudio.h"         // Audio device initialization and management
 #undef PlaySound                        // Win32 API: windows.h > mmsystem.h defines PlaySound macro
 
+#include "raudio_internal.h"           // Internal audio state (AudioData lives in RaylibContext->audioState)
+#include "raudio_observer.h"           // Audio buffer iterator for observability (AI adapter)
+#include "raylib_context.h"            // Required for: RaylibContext, GetRaylibContext()
+
 #include <stdlib.h>                     // Required for: malloc(), free()
 #include <stdio.h>                      // Required for: FILE, fopen(), fclose(), fread()
 #include <string.h>                     // Required for: strcmp() [Used in IsFileExtension(), LoadWaveFromMemory(), LoadMusicStreamFromMemory()]
@@ -380,36 +384,12 @@ struct rAudioProcessor {
 
 #define AudioBuffer rAudioBuffer    // WARNING: Renamed to avoid symbol collision with CoreAudio (macOS) AudioBuffer type
 
-// Audio data context
-typedef struct AudioData {
-    struct {
-        ma_context context;         // miniaudio context data
-        ma_device device;           // miniaudio device
-        ma_mutex lock;              // miniaudio mutex lock
-        bool isReady;               // Check if audio device is ready
-        size_t pcmBufferSize;       // Pre-allocated buffer size
-        void *pcmBuffer;            // Pre-allocated buffer to read audio data from file/memory
-    } System;
-    struct {
-        AudioBuffer *first;         // Pointer to first AudioBuffer in the list
-        AudioBuffer *last;          // Pointer to last AudioBuffer in the list
-        int defaultSize;            // Default audio buffer size for audio streams
-    } Buffer;
-    rAudioProcessor *mixedProcessor;
-} AudioData;
-
 //----------------------------------------------------------------------------------
 // Global Variables Definition
 //----------------------------------------------------------------------------------
-static AudioData AUDIO = {          // Global AUDIO context
-
-    // NOTE: Music buffer size is defined by number of samples, independent of sample size and channels number
-    // After some math, considering a sampleRate of 48000, a buffer refill rate of 1/60 seconds and a
-    // standard double-buffering system, a 4096 samples buffer has been chosen, it should be enough
-    // In case of music-stalls, increase this number
-    .Buffer.defaultSize = 0,
-    .mixedProcessor = NULL
-};
+// AUDIO now lives in RaylibContext->audioState (allocated in InitAudioDevice, freed in CloseAudioDevice)
+// NOTE: AudioData struct is defined in raudio_internal.h
+#define AUDIO (*GetRaylibContext()->audioState)
 
 //----------------------------------------------------------------------------------
 // Module Internal Functions Declaration
@@ -464,6 +444,18 @@ void UntrackAudioBuffer(AudioBuffer *buffer);
 // Initialize audio device
 void InitAudioDevice(void)
 {
+    // Allocate audio state in the context (freed in CloseAudioDevice)
+    GetRaylibContext()->audioState = RL_CALLOC(sizeof(AudioData), 1);
+    if (GetRaylibContext()->audioState == NULL)
+    {
+        TRACELOG(LOG_WARNING, "AUDIO: Failed to allocate audio state");
+        return;
+    }
+
+    // Initialize default values (rest of AUDIO is zeroed by calloc)
+    AUDIO.Buffer.defaultSize = 0;
+    AUDIO.mixedProcessor = NULL;
+
     // Init audio context
     ma_context_config ctxConfig = ma_context_config_init();
     ma_log_callback_init(OnLog, NULL);
@@ -543,6 +535,10 @@ void CloseAudioDevice(void)
         AUDIO.System.pcmBufferSize = 0;
 
         TRACELOG(LOG_INFO, "AUDIO: Device closed successfully");
+
+        // Free the audio state back to the context
+        RL_FREE(GetRaylibContext()->audioState);
+        GetRaylibContext()->audioState = NULL;
     }
     else TRACELOG(LOG_WARNING, "AUDIO: Device could not be closed, not currently initialized");
 }
@@ -2574,6 +2570,11 @@ static void OnSendAudioDataToDevice(ma_device *pDevice, void *pFramesOut, const 
             if (!audioBuffer->playing || audioBuffer->paused) continue;
 
             ma_uint32 framesRead = 0;
+            // Guard against infinite refill spin: a looping stream that never gets
+            // refilled returns 0 frames forever and the refill loop below would spin
+            // the audio thread (diagnosed: "tick once then silence"). Bail out after
+            // a few empty reads instead.
+            int emptyReadStreak = 0;
 
             while (1)
             {
@@ -2595,6 +2596,8 @@ static void OnSendAudioDataToDevice(ma_device *pDevice, void *pFramesOut, const 
                     ma_uint32 framesJustRead = ReadAudioBufferFramesInMixingFormat(audioBuffer, tempBuffer, framesToReadRightNow);
                     if (framesJustRead > 0)
                     {
+                        emptyReadStreak = 0;
+
                         float *framesOut = (float *)pFramesOut + (framesRead*AUDIO.System.device.playback.channels);
                         float *framesIn = tempBuffer;
 
@@ -2610,6 +2613,12 @@ static void OnSendAudioDataToDevice(ma_device *pDevice, void *pFramesOut, const 
 
                         framesToRead -= framesJustRead;
                         framesRead += framesJustRead;
+                    }
+                    else if (++emptyReadStreak >= 4)
+                    {
+                        // Nothing left to read for this buffer this cycle; move on
+                        framesToRead = 0;
+                        break;
                     }
 
                     if (!audioBuffer->playing)
@@ -2958,6 +2967,42 @@ static bool SaveFileText(const char *fileName, char *text)
     return result;
 }
 #endif
+
+//----------------------------------------------------------------------------------
+// Audio Buffer Iterator (for observability — used by AI adapter)
+// NOTE: Declared in raudio_observer.h (miniaudio-free) so the AI adapter can
+// snapshot active audio buffers without pulling in miniaudio types.
+//----------------------------------------------------------------------------------
+
+// Get first audio buffer in the active list
+struct rAudioBuffer *GetFirstAudioBuffer(AudioData *audio)
+{
+    if (audio == NULL) return NULL;
+    return audio->Buffer.first;
+}
+
+// Get next audio buffer in the list
+struct rAudioBuffer *GetNextAudioBuffer(struct rAudioBuffer *buf)
+{
+    if (buf == NULL) return NULL;
+    return buf->next;
+}
+
+// Extract observable info from an audio buffer
+bool GetAudioBufferInfo(struct rAudioBuffer *buf, AudioBufferInfo *info)
+{
+    if (buf == NULL || info == NULL) return false;
+
+    info->usage = buf->usage;
+    info->playing = buf->playing;
+    info->paused = buf->paused;
+    info->looping = buf->looping;
+    info->volume = buf->volume;
+    info->pitch = buf->pitch;
+    info->pan = buf->pan;
+    info->progress = (buf->sizeInFrames > 0) ? (float)buf->frameCursorPos/(float)buf->sizeInFrames : 0.0f;
+    return true;
+}
 
 #undef AudioBuffer
 

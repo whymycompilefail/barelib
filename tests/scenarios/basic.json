@@ -1,0 +1,12 @@
+[
+  {"cmd": "version", "expect": "<<AI_OK>>", "contains": "1.0"},
+  {"cmd": "scene",
+   "block": {"begin": "<<AI_SCENE_BEGIN>>", "end": "<<AI_SCENE_END>>",
+             "json_fields": ["protocol", "screen", "elements"]}},
+  {"cmd": "frobnicate", "expect": "<<AI_ERROR>>", "contains": ["[code:1]", "unknown command"]},
+  {"cmd": "input press definitelynotakey123", "expect": "<<AI_ERROR>>", "contains": ["[code:2]", "unknown key"]},
+  {"cmd": "playback", "expect": "<<AI_ERROR>>", "contains": ["[code:4]", "no recorded entries"]},
+  {"cmd": "elements", "expect": "<<AI_OK>>"},
+  {"cmd": "help", "expect": "<<AI_HELP_END>>", "lines_contain": "version"},
+  {"cmd": "quit", "expect_exit": true}
+]

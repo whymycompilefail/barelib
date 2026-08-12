@@ -1,152 +1,254 @@
-<img align="left" style="width:260px" src="https://github.com/raysan5/raylib/blob/master/logo/raylib_logo_animation.gif" width="288px">
+**raylib** — 2D-focused fork, built for AI game agents.
 
-**raylib is a simple and easy-to-use library to enjoy videogames programming.**
+A stripped-down, 2D-focused fork of [raylib](https://github.com/raysan5/raylib), with an **AI Adapter** that lets LLMs observe, understand, and interact with your game in real time.
 
-raylib is highly inspired by Borland BGI graphics lib and by XNA framework and it's especially well suited for prototyping, tooling, graphical applications, embedded systems and education.
-
-*NOTE for ADVENTURERS: raylib is a programming library to enjoy videogames programming; no fancy interface, no visual helpers, no debug button... just coding in the most pure spartan-programmers way.*
-
-Ready to learn? Jump to [code examples!](https://www.raylib.com/examples.html)
+No 3D, no shaders, no VR. Just 2D drawing, input, audio, and a JSON scene description that an AI can read frame by frame.
 
 ---
 
-<br>
-
-[![GitHub Releases Downloads](https://img.shields.io/github/downloads/raysan5/raylib/total)](https://github.com/raysan5/raylib/releases)
-[![GitHub Stars](https://img.shields.io/github/stars/raysan5/raylib?style=flat&label=stars)](https://github.com/raysan5/raylib/stargazers)
-[![GitHub commits since tagged version](https://img.shields.io/github/commits-since/raysan5/raylib/6.0)](https://github.com/raysan5/raylib/commits/master)
-[![GitHub Sponsors](https://img.shields.io/github/sponsors/raysan5?label=sponsors)](https://github.com/sponsors/raysan5)
-[![Packaging Status](https://repology.org/badge/tiny-repos/raylib.svg)](https://repology.org/project/raylib/versions)
-[![License](https://img.shields.io/badge/license-zlib%2Flibpng-blue.svg)](LICENSE)
-
-[![Discord Members](https://img.shields.io/discord/426912293134270465.svg?label=Discord&logo=discord)](https://discord.gg/raylib)
-[![Reddit Static Badge](https://img.shields.io/badge/-r%2Fraylib-red?style=flat&logo=reddit&label=reddit)](https://www.reddit.com/r/raylib/)
-[![Youtube Subscribers](https://img.shields.io/youtube/channel/subscribers/UC8WIBkhYb5sBNqXO1mZ7WSQ?style=flat&label=Youtube&logo=youtube)](https://www.youtube.com/c/raylib)
-[![Twitch Status](https://img.shields.io/twitch/status/raysan5?style=flat&label=Twitch&logo=twitch)](https://www.twitch.tv/raysan5)
-
-[![Build Windows](https://github.com/raysan5/raylib/actions/workflows/build_windows.yml/badge.svg)](https://github.com/raysan5/raylib/actions/workflows/build_windows.yml)
-[![Build Linux](https://github.com/raysan5/raylib/actions/workflows/build_linux.yml/badge.svg)](https://github.com/raysan5/raylib/actions/workflows/build_linux.yml)
-[![Build macOS](https://github.com/raysan5/raylib/actions/workflows/build_macos.yml/badge.svg)](https://github.com/raysan5/raylib/actions/workflows/build_macos.yml)
-[![Build WebAssembly](https://github.com/raysan5/raylib/actions/workflows/build_webassembly.yml/badge.svg)](https://github.com/raysan5/raylib/actions/workflows/build_webassembly.yml)
-
-[![Build CMake](https://github.com/raysan5/raylib/actions/workflows/build_cmake.yml/badge.svg)](https://github.com/raysan5/raylib/actions/workflows/build_cmake.yml)
-[![Build examples Windows](https://github.com/raysan5/raylib/actions/workflows/build_examples_windows.yml/badge.svg)](https://github.com/raysan5/raylib/actions/workflows/build_examples_windows.yml)
-[![Build examples Linux](https://github.com/raysan5/raylib/actions/workflows/build_examples_linux.yml/badge.svg)](https://github.com/raysan5/raylib/actions/workflows/build_examples_linux.yml)
-
 features
 --------
-  - **NO external dependencies**, all required libraries are [included into raylib](https://github.com/raysan5/raylib/tree/master/src/external)
-  - Multiple platforms supported: **Windows, Linux, MacOS, RPI, Android, HTML5... and more!**
-  - Written in plain C code (C99) using PascalCase/camelCase notation
-  - Hardware accelerated with OpenGL: **1.1, 2.1, 3.3, 4.3, ES 2.0, ES 3.0**
-  - **Unique OpenGL abstraction layer** (usable as standalone module): [rlgl](https://github.com/raysan5/raylib/blob/master/src/rlgl.h)
-  - **Software Renderer** backend (no OpenGL required!): [rlsw](https://github.com/raysan5/raylib/blob/master/src/external/rlsw.h)
-  - Multiple **Fonts** formats supported (TTF, OTF, FNT, BDF, sprite fonts)
-  - Multiple texture formats supported, including **compressed formats** (DXT, ETC, ASTC)
-  - **Full 3D support**, including 3D Shapes, Models, Billboards, Heightmaps and more!
-  - Flexible Materials system, supporting classic maps and **PBR maps**
-  - **Animated 3D models** supported (skeletal bones animation) (IQM, M3D, glTF)
-  - Shaders support, including model shaders and **postprocessing** shaders
-  - **Powerful math module** for Vector, Matrix and Quaternion operations: [raymath](https://github.com/raysan5/raylib/blob/master/src/raymath.h)
-  - Audio loading and playing with streaming support (WAV, QOA, OGG, MP3, FLAC, XM, MOD)
-  - **VR stereo rendering** support with configurable HMD device parameters
-  - Huge examples collection with [+140 code examples](https://github.com/raysan5/raylib/tree/master/examples)!
-  - Bindings to [+70 programming languages](https://github.com/raysan5/raylib/blob/master/BINDINGS.md)!
-  - **Free and open source**
 
-basic example
+**Core 2D engine**
+  - Windows (desktop) — the authoring/usage platform; Android is a supported target (games can build for Android); other platforms out of scope
+  - OpenGL hardware accelerated (1.1, 2.1, 3.3, ES 2.0, ES 3.0)
+  - Software renderer backend (no GPU required)
+  - 2D shapes, textures, text, and audio
+  - Render textures for offscreen rendering
+  - Camera2D with world-to-screen and screen-to-world transforms
+  - Input: keyboard, mouse, gamepad, touch
+  - Written in C99, zero external dependencies at build time
+
+**AI Adapter** (`raylib_ai_adapter.h`)
+  - **Versioned protocol**: scene JSON carries a `protocol` field (`AI_PROTOCOL_VERSION`), `version` command reports it — AI agents can adapt to engine evolution
+  - **Structured error model**: `<<AI_ERROR>> [code:N]` with `AIErrorCode` (unknown command / bad argument / buffer full / no data / not supported), plus `AIGetLastError()`
+  - **Non-invasive observability**: `AISetAutoSceneCapture()` — stock games using
+    plain DrawXXX (no wrappers, no code changes) automatically appear in the
+    scene JSON via an engine-level draw hook (rect/circle/text families)
+  - **Explicit capacity**: `MAX_AI_ELEMENTS` is configurable; when the scene buffer overflows, the JSON reports an `overflow` count instead of silently truncating
+  - **Scene observation**: AIDrawXXX wrapper functions register each drawn element; `AIGetSceneJSON()` produces structured JSON
+  - **Command loop**: stdin-driven control — `version`, `scene`, `input`, `pause`, `resume`, `step`, `state`, `errors`, `elements`, `record`, `playback`, `snapshot`, `diff`, `help`, `quit`
+  - **Input injection**: key press, mouse click, scroll, text type via `AIInjectInput()` or `input` command.
+    Two modes (`inputmode` command / `AISetInputMode()`): `sendinput` (default, OS input queue,
+    requires the game window in the foreground) and `postmessage` (WM_* messages posted straight to
+    the game window — works in the background, so an unattended AI tester can drive the game)
+  - **Game loop control**: pause / resume / step-by-frame for frame-by-frame debugging
+  - **Record / playback**: record input action sequences and replay them for bug reproduction
+  - **Scene snapshots**: save scene state, diff against current frame to detect changes
+  - **Log interception**: capture raylib TraceLog output with timestamps
+  - **Procedural audio**: AIPlayTone / AIPlayNoise with 5 waveforms (sine, square, triangle, sawtooth, noise)
+  - **Backend state query**: window, input, time, audio state as JSON
+  - **Dependency injection**: mock AIDeps for testing without a window
+  - No network, no external AI runtime — just data your agent can consume
+
+**Designed for testing**
+  - 13 CTest suites, 100% passing (unit + GPU-hidden-window + protocol scenario)
+  - GPU tests run in hidden window, no desktop interference
+  - Pure CPU functions tested without window or GPU
+  - All tests runnable via a single `ctest` command
+
+**CJK text support**
+  - Embedded 13MB Sarasa Gothic SC font with full GB2312 coverage
+  - Zero external font files needed — Chinese text works out of the box
+  - Subset includes ASCII, Latin-1, CJK ideographs, symbols, and more
+
+what's removed
 --------------
-This is a basic raylib example, it creates a window and draws the text `"Congrats! You created your first window!"` in the middle of the screen. Check this example [running live on web here](https://www.raylib.com/examples/core/loader.html?name=core_basic_window).
+Compared to upstream raylib, this fork removes everything 3D and GPU-programmable:
+
+  - No 3D shapes, models, or billboards
+  - No materials or PBR
+  - No skeletal animation
+  - No shader API (loading, custom shaders, postprocessing)
+  - No VR stereo rendering
+  - No compute shaders or SSBOs
+  - No automation events recording/playback
+
+quick start
+-----------
+
 ```c
 #include "raylib.h"
 
 int main(void)
 {
-    InitWindow(800, 450, "raylib example - basic window");
+    InitWindow(800, 600, "Hello");
 
     while (!WindowShouldClose())
     {
         BeginDrawing();
-            ClearBackground(RAYWHITE);
-            DrawText("Congrats! You created your first window!", 190, 200, 20, LIGHTGRAY);
+        ClearBackground(RAYWHITE);
+        DrawText("Hello from raylib 2D!", 10, 10, 20, DARKGRAY);
         EndDrawing();
     }
 
     CloseWindow();
-
     return 0;
 }
 ```
 
-build and installation
-----------------------
+With AI Adapter (AIDrawXXX wrappers + command loop):
 
-raylib binary releases for Windows, Linux, macOS, Android and HTML5 are available at the [Github Releases page](https://github.com/raysan5/raylib/releases).
+```c
+#include "raylib.h"
+#include "raylib_ai_adapter.h"
 
-raylib is also available via multiple package managers on multiple OS distributions.
+int main(void)
+{
+    InitWindow(800, 600, "AI Game");
+    AIAdapter *ai = AIInit();
+    AIStartCommandLoop(ai);  // listen for stdin commands from AI agent
 
-#### Installing and building raylib on multiple platforms
+    while (!WindowShouldClose())
+    {
+        BeginDrawing();
+        AIClearBackground(RAYWHITE);              // ClearBackground + reset scene buffer
+        AIDrawRect(10, 10, 100, 40, 0, BLUE);     // DrawRect + register element
+        AIDrawText(GetFontDefault(), "Score: 100", 10, 60, 20, 1, BLACK);  // DrawText + register element
+        EndDrawing();
+        AIUpdate(ai);  // process commands, advance playback, auto-output JSON
+    }
 
-[raylib Wiki](https://github.com/raysan5/raylib/wiki#development-platforms) contains detailed instructions on building and usage on multiple platforms.
+    AIClose(ai);
+    CloseWindow();
+    return 0;
+}
+```
 
- - [Working on Windows](https://github.com/raysan5/raylib/wiki/Working-on-Windows)
- - [Working on macOS](https://github.com/raysan5/raylib/wiki/Working-on-macOS)
- - [Working on GNU Linux](https://github.com/raysan5/raylib/wiki/Working-on-GNU-Linux)
- - [Working on Chrome OS](https://github.com/raysan5/raylib/wiki/Working-on-Chrome-OS)
- - [Working on FreeBSD](https://github.com/raysan5/raylib/wiki/Working-on-FreeBSD)
- - [Working on Raspberry Pi](https://github.com/raysan5/raylib/wiki/Working-on-Raspberry-Pi)
- - [Working for Android](https://github.com/raysan5/raylib/wiki/Working-for-Android)
- - [Working for Web (HTML5)](https://github.com/raysan5/raylib/wiki/Working-for-Web-(HTML5))
- - [Working anywhere with CMake](https://github.com/raysan5/raylib/wiki/Working-with-CMake)
+AI agents interact via stdin/stdout pipes:
 
-*Note that the Wiki is open for edit, if you find some issues while building raylib for your target platform, feel free to edit the Wiki or open an issue related to it.*
+```
+> version            # get protocol version
+< <<AI_OK>> protocol 1.0 (barelib AI adapter)
+> scene              # get current scene as JSON
+< {"protocol":"1.0","screen":{"width":800,"height":600},"elements":[...]}
+> input press space  # inject a key press
+> snapshot           # save current scene
+> step 5             # advance 5 frames
+> diff               # compare current scene to snapshot
+< {"changed":2,"changes":[...]}
+> record             # start recording inputs
+> input press right
+> record stop        # stop recording
+> playback           # replay recorded inputs
+> quit               # close the game
+```
 
-#### Setup raylib with multiple IDEs
+build
+-----
 
-raylib has been developed on Windows platform using [Notepad++](https://notepad-plus-plus.org/) and [MinGW GCC](https://www.mingw-w64.org/) compiler but it can be used with other IDEs on multiple platforms.
+```bash
+cmake -B build -S . -G "Visual Studio 17 2022" -DBUILD_EXAMPLES=OFF
+cmake --build build --target raylib --config Debug
+```
 
-[Projects directory](https://github.com/raysan5/raylib/tree/master/projects) contains several ready-to-use **project templates** to build raylib and code examples with multiple IDEs.
+Output goes to `bin/Debug/`.
 
-*Note that there are lots of IDEs supported, some of the provided templates could require some review, so please, if you find some issue with a template or you think they could be improved, feel free to send a PR or open a related issue.*
+- **Static library only** (spec P7: exe-only engine, no DLL builds) — link
+  `raylib.lib`, no runtime DLL needed.
 
-learning and docs
-------------------
+compile a game
+--------------
 
-raylib is designed to be learned using [the examples](https://github.com/raysan5/raylib/tree/master/examples) as the main reference. There is no standard API documentation but there is a [**cheatsheet**](https://www.raylib.com/cheatsheet/cheatsheet.html) containing all the functions available on the library a short description of each one of them, input parameters and result value names should be intuitive enough to understand how each function works.
+Use the included compile script (Windows / MSVC):
 
-Some additional documentation about raylib design can be found in [raylib GitHub Wiki](https://github.com/raysan5/raylib/wiki). Here are the relevant links:
+```bat
+compile_game.bat my_game.c           :: compile and run
+compile_game.bat my_game.c build     :: compile only
+```
 
- - [raylib cheatsheet](https://www.raylib.com/cheatsheet/cheatsheet.html)
- - [raylib architecture](https://github.com/raysan5/raylib/wiki/raylib-architecture)
- - [raylib library design](https://github.com/raysan5/raylib/wiki)
- - [raylib examples collection](https://github.com/raysan5/raylib/tree/master/examples)
- - [raylib games collection](https://github.com/raysan5/raylib-games)
+The script auto-configures Visual Studio (probes 2022/2019 install paths) and
+fixes non-ASCII TEMP path issues. See `examples/` for complete starters
+(AI-observable game loops, AIDrawXXX wrappers, command loop, procedural audio).
 
+run tests
+---------
 
-contact and networks
----------------------
+```bash
+cmake -B build -S . -DBUILD_EXAMPLES=OFF
+cmake --build build --config Debug
+cd build && ctest -C Debug
+```
 
-raylib is present in several networks and raylib community is growing everyday. If you are using raylib and enjoying it, feel free to join us in any of these networks. The most active network is our [Discord server](https://discord.gg/raylib)! :)
+The test suite includes:
 
- - Webpage: [https://www.raylib.com](https://www.raylib.com)
- - Discord: [https://discord.gg/raylib](https://discord.gg/raylib)
- - X: [https://x.com/raysan5](https://x.com/raysan5)
- - BlueSky: [https://bsky.app/profile/raysan5](https://bsky.app/profile/raysan5.bsky.social)
- - Twitch:  [https://www.twitch.tv/raysan5](https://www.twitch.tv/raysan5)
- - Reddit:  [https://www.reddit.com/r/raylib](https://www.reddit.com/r/raylib)
- - Patreon: [https://www.patreon.com/raylib](https://www.patreon.com/raylib)
- - YouTube: [https://www.youtube.com/channel/raylib](https://www.youtube.com/c/raylib)
+- **Unit tests** (no window/GPU needed): AI adapter (123 assertions: protocol
+  version, element overflow, input error feedback, scene JSON truncation safety,
+  record/playback, state snapshot JSON, observer ownership), raymath, rtext,
+  rtextures, raudio, rcore, rshapes — run headless.
+- **GPU tests** (hidden window): `test_gpu`, plus `ai_protocol_scenario` — an
+  end-to-end protocol conformance regression that drives the live game over
+  stdin/stdout pipes (8 steps: version, scene JSON, error codes, help, quit).
+  Both carry the `gpu` label; run them with `ctest -L gpu`.
 
-contributors
-------------
+Protocol regression tooling (requires a GUI/GPU desktop):
 
-<a href="https://github.com/raysan5/raylib/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=raysan5/raylib&max=800&columns=24&anon=0" />
-</a>
+```bash
+cmake --build build --target ai_protocol_harness --config Debug
+python tests/ai_protocol_check.py              # 7 quick protocol smoke checks
+python tests/ai_scenario_check.py tests/scenarios/basic.json --report out.json
+python tests/ai_tester_session.py              # end-to-end: inject a key in the
+                                               # background window (postmessage mode)
+                                               # and verify via scene JSON that the
+                                               # game actually moved
+# --report writes a machine-readable JSON report for the AI test->report->fix loop
+```
+
+project structure
+-----------------
+
+```
+src/              — Library source (raylib + AI Adapter)
+  raylib.h              — Public API umbrella header
+  raylib_core.h         — Window, input, filesystem, timing
+  raylib_shapes.h       — 2D shape drawing
+  raylib_textures.h     — Image/texture loading and drawing
+  raylib_text.h         — Font loading, text rendering
+  raylib_audio.h        — Audio device, Sound/Music/AudioStream
+  raymath.h             — Vector2/Vector3/Vector4/Matrix math
+  rlgl.h                — OpenGL abstraction (low-level public API)
+  rcore.c               — Core implementation
+  rcore_fs.c            — File system implementation
+  rcore_input.c         — Input state implementation
+  rshapes.c             — Shape drawing implementation
+  rtextures.c           — Texture implementation
+  rtext.c               — Text implementation
+  raudio.c              — Audio implementation
+  raymath.c             — Math implementation
+  raylib_ai_adapter.h   — AI Adapter public API
+  raylib_ai_adapter.c   — AI Adapter facade (init/update/close, state JSON)
+  ai_scene.c            — Scene elements, 16 AIDrawXXX wrappers, JSON/diff
+  ai_audio.c            — Procedural audio (waveforms, tone slots)
+  ai_input.c            — Input injection, key names, record/playback
+  ai_protocol.c         — stdin command loop
+  raylib_ai_input.h     — Platform input simulation interface
+  raylib_ai_input_win32.c — Windows SendInput implementation
+  raylib_ai_input_stubs.c — Non-Windows input stubs
+  raylib_context.h      — RaylibContext (global state container)
+  raudio_observer.h     — Audio buffer observer (miniaudio-free)
+  platform_android.c    — Android platform backend
+  cjk_font_data.h/.c    — Embedded CJK font data (~13MB)
+examples/         — Engine feature examples (upstream raylib samples removed)
+  ai_music_demo.c    — Feature showcase: AI-observable music visualizer (AIDrawXXX, CJK HUD, procedural audio)
+  ai_shapes_demo.c   — Feature showcase: AI-observable 2D shape gallery (all primitives incl. rounded rect + sector)
+  ai_replay_demo.c   — Feature showcase: record/playback protocol + input injection (AI operability)
+tests/            — Unit tests (test_ai_adapter.c + others)
+docs/
+  ai_adapter.md         — AI Adapter full API reference
+compile_game.bat  — Compile script for AI-authored games
+```
+
+docs
+----
+
+- [AI Adapter](docs/ai_adapter.md) — full API reference, command loop, record/playback, JSON format
+- [Spec](spec.txt) — platform scope, API principles, module layout, hygiene rules
+- [Contributing](CONTRIBUTING.md) — how to build, test and contribute
+- [Security](SECURITY.md) — vulnerability reporting and project security notes
 
 license
 -------
 
-raylib is licensed under an unmodified zlib/libpng license, which is an OSI-certified, BSD-like license that allows static linking with closed source software. Check [LICENSE](LICENSE) for further details.
+zlib/libpng. See [LICENSE](LICENSE).
 
-raylib uses internally some libraries for window/graphics/inputs management and also to support different file formats loading, all those libraries are embedded with and are available in [src/external](https://github.com/raysan5/raylib/tree/master/src/external) directory. Check [raylib dependencies LICENSES](https://github.com/raysan5/raylib/wiki/raylib-dependencies) on [raylib Wiki](https://github.com/raysan5/raylib/wiki) for details.
+This is a fork of [raylib](https://github.com/raysan5/raylib) by Ramon Santamaria (@raysan5), used under the same license.
