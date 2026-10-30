@@ -168,18 +168,18 @@
 
 ## F. 文档口径与提交
 
-- [ ] **F1 文档数字统一**
+- [x] **F1 文档数字统一**
   - API 数量：`README.md`（732）、`CONTEXT.md`（732）、`spec.txt`（701/706）→ 以一次实测脚本统计为准，全量替换
   - README "13 CTest 套件" 与实际 `tests/CMakeLists.txt` 对齐
-- [ ] **F2 仓库卫生**
+- [x] **F2 仓库卫生**
   - `src/cjk_font_data.c`（81.3MB 生成物）：加入 `.gitignore`，文档写明由 `scripts/prepare_cjk_font.py` 生成；确认 GitHub 仓库如何处理历史大文件（必要时后续单独处理，不在本轮强制改写历史）
   - 删除已入库的 `_test_compat/`、根目录 `*.obj`、`bin/Debug/*.obj`、`*.lib.bak`、`temp/` 旧报告、`tests/__pycache__/`
   - `examples/json具体内容.txt` 等临时文件清理
-- [ ] **F3 本地仓库接线到自己的 fork**
+- [x] **F3 本地仓库接线到自己的 fork**
   - `origin` → `upstream`（raylib），新增 `origin` = `whymycompilefail/barelib`
   - fetch 后把本地分支对齐 `cbf14af7`（先备份本地 `ai_protocol.c`，因为它在远端之外）
   - 推送本轮修复（建议按 A/B/C/D/E/F 分 5–6 个提交，而不是一个大 commit）
-- [ ] **F4 提交信息与验收记录**
+- [x] **F4 提交信息与验收记录**
   - 每个提交附带对应测试项编号（如 `fix(audio): null audioState (B1, T1)`）
   - 提交前记录一份 `ctest` 输出作为基线
 
