@@ -43,6 +43,26 @@ set(raylib_public_headers
     )
 
 # Sources to be compiled
+# The embedded CJK font is a ~81MB generated source file (git-ignored). Regenerate
+# it on demand so a fresh clone still builds (requires pip: requests py7zr fonttools).
+if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/cjk_font_data.c")
+    message(STATUS "cjk_font_data.c missing, generating embedded CJK font...")
+    find_package(Python3 COMPONENTS Interpreter QUIET)
+    if(Python3_Interpreter_FOUND)
+        execute_process(
+            COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/scripts/prepare_cjk_font.py"
+            WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+            RESULT_VARIABLE CJK_FONT_RESULT)
+        if(NOT CJK_FONT_RESULT EQUAL 0)
+            message(FATAL_ERROR "Font generation failed. Install deps (pip install requests py7zr fonttools) "
+                                "and run: python scripts/prepare_cjk_font.py")
+        endif()
+    else()
+        message(FATAL_ERROR "src/cjk_font_data.c is missing and Python3 was not found. "
+                            "Install Python 3 and run: python scripts/prepare_cjk_font.py")
+    endif()
+endif()
+
 set(raylib_sources
     rcore.c
     rcore_fs.c
@@ -56,12 +76,10 @@ set(raylib_sources
     )
 
 # Platform backend files (separate compilation units)
-# NOTE: Only the platform matching the target is compiled. Web backend was removed
-# (spec: Windows is the official platform; Android adapter code is kept).
+# NOTE: Only the platform matching the target is compiled.
+# Web and Android backends were removed: Windows is the only supported platform.
 if (${PLATFORM} STREQUAL "Desktop")
     list(APPEND raylib_sources platform_glfw.c)
-elseif (${PLATFORM} STREQUAL "Android")
-    list(APPEND raylib_sources platform_android.c)
 endif()
 
 # Only build raudio if it's enabled
@@ -115,12 +133,6 @@ if (${PLATFORM} MATCHES "Web")
         target_link_options(raylib PUBLIC "-sMIN_WEBGL_VERSION=2")
         target_link_options(raylib PUBLIC "-sMAX_WEBGL_VERSION=2")
     endif()
-endif()
-
-if (${PLATFORM} MATCHES "Android")
-    # Wrap fopen at link time so all code (including third-party libs) goes
-    # through __wrap_fopen, which handles Android APK asset loading
-    target_link_options(raylib PUBLIC -Wl,--wrap=fopen)
 endif()
 
 set_target_properties(raylib PROPERTIES

@@ -29,7 +29,7 @@
 - **raudio**：音频设备、Sound/Wave/Music/AudioStream 管理
 - **AI Adapter**：场景元素追踪（AIDrawXXX 包装函数自动注册 + AIRegisterElement 手动注册）、命令循环（stdin 线程读取 → 命令队列 → AIUpdate 处理，支持 version/scene/input/inputmode/pause/resume/step/state/errors/quiet/loud/elements/clear/record/playback/snapshot/diff/help/quit）、协议版本化（AI_PROTOCOL_VERSION + 场景 JSON `protocol` 字段 + version 命令）、结构化错误模型（AIErrorCode 枚举 + `<<AI_ERROR>> [code:N]` 输出 + AIGetLastError 查询最后错误）、容量显式溢出（MAX_AI_ELEMENTS 可配置 + 场景 JSON `overflow` 字段）、录制/回放系统（记录输入动作+帧号，按帧重放）、场景快照与差异比较（AISaveSnapshot/AIGetSnapshotDiff，比较 type/pos/size/radius/color 变化）、游戏循环控制（AIPauseGame/AIResumeGame/AIStepFrame）、输入注入（AIInjectInput，支持 press/click/move/scroll/type）、后端状态查询（AIGetWindowStateJSON/AIGetInputStateJSON/AIGetTimeStateJSON/**AIGetAudioStateJSON 全部经 AIStateSnapshot 纯格式化**——含 audio 设备/缓冲列表，候选 3 完成；快照由 deps->getStateSnapshot 注入，默认实现直读 CORE 与 raudio iterator）、程序化音频生成（AIPlayTone/AIPlayNoise + 5 种波形 + 淡入淡出 + handle 控制）、依赖注入（AIDeps 用于无窗口测试）、stdout 协议（<<AI_SCENE_BEGIN>>/<<AI_DIFF_BEGIN>> 等标记）
 
-## API 精简状态（当前总计 ~732 个 RLAPI/RMAPI 函数：引擎 669 + AI 层 63，2026-08 实测）
+## API 精简状态（当前总计 733 个 RLAPI/RMAPI 函数：引擎 669 + AI 层 64，2026-10 实测）
 
 | 模块 | 函数数 | 精简内容 |
 |------|--------|----------|
@@ -43,7 +43,7 @@
 
 ## 已移除/内部化的功能
 - **3D 模块**：rmodels 完全移除
-- **Web 后端**：platform_web.c 于 M4 清除（Android 适配 platform_android.c 保留）
+- **Web / Android 后端**：platform_web.c 于 M4 清除；platform_android.c 于提交前清理（平台范围收敛为 Windows 桌面）
 
 ## 渲染管线修复（diagnosing-bugs，2026-08）
 默认 framebuffer 顶点渲染全黑 + 音乐示例只显示背景的根因是 4 个叠加 bug（都在 rlgl/rcore/rshapes 魔改中引入）：

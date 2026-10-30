@@ -4,7 +4,7 @@
 *
 *   FEATURES:
 *       - NO external dependencies, all required libraries included with raylib
-*       - Multiplatform: Windows, Linux, macOS, FreeBSD, Web, Android, Raspberry Pi, DRM native...
+*       - Platform: Windows desktop only (other backends removed)
 *       - Written in plain C code (C99) in PascalCase/camelCase notation
 *       - Hardware accelerated with OpenGL (1.1, 2.1, 3.3, 4.3, ES2, ES3 - choose at compile)
 *       - Software renderer optional, for systems with no GPU: [rlsw]
@@ -508,11 +508,11 @@ typedef enum {
     KEY_KP_ADD          = 334,      // Key: Keypad +
     KEY_KP_ENTER        = 335,      // Key: Keypad Enter
     KEY_KP_EQUAL        = 336,      // Key: Keypad =
-    // Android key buttons
-    KEY_BACK            = 4,        // Key: Android back button
-    KEY_MENU            = 5,        // Key: Android menu button
-    KEY_VOLUME_UP       = 24,       // Key: Android volume up button
-    KEY_VOLUME_DOWN     = 25        // Key: Android volume down button
+    // Legacy mobile key codes (kept for API compatibility, Android backend removed)
+    KEY_BACK            = 4,        // Key: legacy mobile back button
+    KEY_MENU            = 5,        // Key: legacy mobile menu button
+    KEY_VOLUME_UP       = 24,       // Key: legacy mobile volume up button
+    KEY_VOLUME_DOWN     = 25        // Key: legacy mobile volume down button
 } KeyboardKey;
 
 // Add backwards compatibility support for deprecated names

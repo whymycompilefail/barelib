@@ -205,7 +205,15 @@ void AIInjectInput(AIAdapter *adapter, const char *action)
 
         adapter->deps->simulateMouseMove(x, y);
         adapter->deps->simulateMouseDown(button);
-        adapter->deps->simulateMouseUp(button);
+        if (adapter->inputMode == AI_SIMULATE_POSTMESSAGE)
+        {
+            // Delay the release one frame so IsMouseButtonPressed still sees it
+            adapter->pendingMouseUp = button;
+        }
+        else
+        {
+            adapter->deps->simulateMouseUp(button);
+        }
         return;
     }
     else if (strcmp(cmd, "move") == 0)
@@ -244,6 +252,13 @@ void AIInjectInput(AIAdapter *adapter, const char *action)
             else if (*p == '\n') key = 257;  // enter
             else if (*p == '\t') key = 258;  // tab
             else if (*p == '\x1b') key = 256; // escape
+            else if ((unsigned char)(*p) >= 0x80)
+            {
+                // Non-ASCII input is not supported: injecting the raw UTF-8 byte as
+                // a keycode would produce garbage keystrokes (C6).
+                AI_SET_ERROR(adapter, AI_ERR_BAD_ARGUMENT, "type: non-ASCII input is not supported");
+                return;
+            }
             else key = (int)(*p);
 
             if (key >= 0)

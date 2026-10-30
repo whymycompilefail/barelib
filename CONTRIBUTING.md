@@ -19,10 +19,7 @@ Read these before contributing:
 
 - **Authoring and usage is Windows-only** (desktop). The build toolchain is
   Visual Studio + `compile_game.bat`, or CMake (`cmake -B build -S .`).
-- **Android is a supported target platform** (`platform_android.c`,
-  `projects/VS2019-Android/`); it builds independently but daily development
-  and testing happen on Windows.
-- Linux / macOS / Web desktop builds are out of scope (no CI, no guarantees).
+- Linux / macOS / Web / Android builds are out of scope (no CI, no guarantees).
 
 ## How to help
 

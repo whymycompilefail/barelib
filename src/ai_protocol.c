@@ -84,7 +84,10 @@ void AIStartCommandLoop(AIAdapter *adapter)
 // so existing console-driven AI tooling keeps working unchanged.
 static void AIPrintOutput(AIAdapter *adapter, const char *format, ...)
 {
-    char buffer[AI_COMMAND_MAX_LEN];
+    // NOTE: scene/state/diff JSON can be far larger than a command line, so the
+    // output buffer must be the full JSON size, not AI_COMMAND_MAX_LEN (512 B),
+    // otherwise large scenes get truncated mid-stream (losing '<<AI_SCENE_END>>').
+    char buffer[MAX_JSON_STRING];
     va_list args;
     va_start(args, format);
     vsnprintf(buffer, sizeof(buffer), format, args);
@@ -144,7 +147,12 @@ void AIProcessCommands(AIAdapter *adapter)
         else if (strcmp(action, "scene") == 0)
         {
             const char *json = AIGetSceneJSON(adapter);
-            AIPrintOutput(adapter, "<<AI_SCENE_BEGIN>>\n%s\n<<AI_SCENE_END>>\n", json);
+            // Emit markers on their own lines: the JSON may already fill the
+            // whole output buffer, and appending the end marker in the same
+            // format string would truncate it (breaking the AI stream parser).
+            AIPrintOutput(adapter, "<<AI_SCENE_BEGIN>>\n");
+            AIPrintOutput(adapter, "%s\n", json);
+            AIPrintOutput(adapter, "<<AI_SCENE_END>>\n");
         }
         else if (strcmp(action, "input") == 0)
         {
@@ -208,11 +216,15 @@ void AIProcessCommands(AIAdapter *adapter)
             else if (strcmp(category, "time") == 0) json = AIGetTimeStateJSON(adapter);
             else if (strcmp(category, "audio") == 0) json = AIGetAudioStateJSON(adapter);
             else json = AIGetWindowStateJSON(adapter);  // Default: window
-            AIPrintOutput(adapter, "<<AI_STATE_BEGIN>>\n%s\n<<AI_STATE_END>>\n", json);
+            AIPrintOutput(adapter, "<<AI_STATE_BEGIN>>\n");
+            AIPrintOutput(adapter, "%s\n", json);
+            AIPrintOutput(adapter, "<<AI_STATE_END>>\n");
         }
         else if (strcmp(action, "errors") == 0)
         {
-            AIPrintOutput(adapter, "<<AI_ERRORS_BEGIN>>\n%s\n<<AI_ERRORS_END>>\n", AIGetErrorsJSON(adapter));
+            AIPrintOutput(adapter, "<<AI_ERRORS_BEGIN>>\n");
+            AIPrintOutput(adapter, "%s\n", AIGetErrorsJSON(adapter));
+            AIPrintOutput(adapter, "<<AI_ERRORS_END>>\n");
         }
         else if (strcmp(action, "quiet") == 0)
         {
@@ -284,7 +296,9 @@ void AIProcessCommands(AIAdapter *adapter)
         else if (strcmp(action, "diff") == 0)
         {
             const char *json = AIGetSnapshotDiff(adapter);
-            AIPrintOutput(adapter, "<<AI_DIFF_BEGIN>>\n%s\n<<AI_DIFF_END>>\n", json);
+            AIPrintOutput(adapter, "<<AI_DIFF_BEGIN>>\n");
+            AIPrintOutput(adapter, "%s\n", json);
+            AIPrintOutput(adapter, "<<AI_DIFF_END>>\n");
         }
         else if (strcmp(action, "help") == 0)
         {

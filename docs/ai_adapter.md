@@ -319,6 +319,10 @@ AIInjectInput(adapter, "type hello");
 
 Key names (case-insensitive): a-z, 0-9, space, enter, escape, tab, backspace, delete, insert, home, end, pageup, pagedown, up, down, left, right, shift, ctrl, alt, f1-f12.
 
+`type` only supports ASCII input: non-ASCII characters (e.g. Chinese) are rejected with `AI_ERR_BAD_ARGUMENT` instead of injecting garbage keycodes.
+
+In `postmessage` mode, `press` and `click` delay the release by one frame (flushed by `AIUpdate`) so the game's `IsKeyPressed` / `IsMouseButtonPressed` can observe the event.
+
 ### Game loop control
 
 | Function | Description |
@@ -510,7 +514,7 @@ See `examples/ai_music_demo.c` for a complete starter demonstrating AIDrawXXX wr
 | Memory | Low | All buffers are static; only strdup for log messages is dynamic |
 | Log hook collision | Medium | Last hook wins. Restore on `AIClose()`. Keep adapter as the last hook installed. |
 | Thread safety | Medium | Command queue is mutex-protected. Other state is single-threaded (raylib's main loop). |
-| Input injection | Medium | `SendInput` targets the foreground window. No-op on Web/Android. |
+| Input injection | Medium | `SendInput` targets the foreground window. Non-Windows builds use no-op stubs. |
 | Misuse | Medium | Must call `AIInit()` after `InitWindow()`. Must call `AIClearBackground()` each frame. `AIUpdate()` goes after `EndDrawing()`. |
 
 ---

@@ -418,6 +418,31 @@ static void TestCamera2D(void)
     TEST("Camera render has color", c.r > 0 || c.g > 0 || c.b > 0);
     UnloadImage(back);
     UnloadRenderTexture(rt);
+
+    // Pixel-accurate transform check (B2): offset + zoom must be applied in the
+    // right order by rlMatrixMultiply. World rect (-25,-25,50,50) with
+    // offset=(100,100) and zoom=2 covers screen x/y in [50,150] of a 200x200 RT.
+    Camera2D cam2 = { 0 };
+    cam2.target = (Vector2){ 0, 0 };
+    cam2.offset = (Vector2){ 100, 100 };
+    cam2.zoom = 2.0f;
+    cam2.rotation = 0.0f;
+
+    RenderTexture2D rt2 = LoadRenderTexture(200, 200);
+    BeginTextureMode(rt2);
+    ClearBackground(BLACK);
+    BeginMode2D(cam2);
+    DrawRectangle(-25, -25, 50, 50, RED);
+    EndMode2D();
+    EndTextureMode();
+
+    Image img = LoadImageFromTexture(rt2.texture);
+    Color center = GetImageColor(img, 100, 100);
+    Color outside = GetImageColor(img, 180, 100);
+    TEST("Camera2D transform: center pixel is RED", center.r > 200 && center.g < 60 && center.b < 60);
+    TEST("Camera2D transform: outside pixel is BLACK", outside.r < 20 && outside.g < 20 && outside.b < 20);
+    UnloadImage(img);
+    UnloadRenderTexture(rt2);
 }
 
 //----------------------------------------------------------------------------------

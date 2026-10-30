@@ -1387,6 +1387,14 @@ int GetGlyphIndex(Font font, int codepoint)
 
 #define SUPPORT_UNORDERED_CHARSET
 #if defined(SUPPORT_UNORDERED_CHARSET)
+    // ASCII fast path: the built-in/loaded fonts keep printable ASCII glyphs
+    // first, so most DrawText calls avoid the O(glyphCount) scan (D4)
+    if ((codepoint >= 32) && (codepoint < 127))
+    {
+        int fastIndex = codepoint - 32;
+        if ((fastIndex < font.glyphCount) && (font.glyphs[fastIndex].value == codepoint)) return fastIndex;
+    }
+
     int fallbackIndex = 0;      // Get index of fallback glyph '?'
 
     // Look for character index in the unordered charset

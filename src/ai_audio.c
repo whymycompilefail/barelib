@@ -168,6 +168,7 @@ int AIPlayTone(AIAdapter *adapter, float frequency, float duration, float volume
     // Record in slot
     adapter->audioSlots[slot].sound = sound;
     adapter->audioSlots[slot].active = true;
+    adapter->audioSlots[slot].paused = false;
     adapter->audioSlots[slot].duration = duration;
     adapter->audioSlots[slot].volume = volume;
     adapter->audioSlots[slot].pitch = 1.0f;
@@ -192,6 +193,7 @@ void AIStopAudio(AIAdapter *adapter, int handle)
     StopSound(adapter->audioSlots[slot].sound);
     UnloadSound(adapter->audioSlots[slot].sound);
     adapter->audioSlots[slot].active = false;
+    adapter->audioSlots[slot].paused = false;
 }
 
 // Pause a procedural audio source by handle
@@ -202,6 +204,7 @@ void AIPauseAudio(AIAdapter *adapter, int handle)
     if (!adapter->audioSlots[slot].active) return;
 
     PauseSound(adapter->audioSlots[slot].sound);
+    adapter->audioSlots[slot].paused = true;
 }
 
 // Resume a paused procedural audio source by handle
@@ -212,6 +215,7 @@ void AIResumeAudio(AIAdapter *adapter, int handle)
     if (!adapter->audioSlots[slot].active) return;
 
     ResumeSound(adapter->audioSlots[slot].sound);
+    adapter->audioSlots[slot].paused = false;
 }
 
 // Set volume of a procedural audio source by handle
@@ -256,7 +260,7 @@ void AIAudioUpdate(AIAdapter *adapter)
 
     for (int i = 0; i < MAX_AI_AUDIO_SLOTS; i++)
     {
-        if (adapter->audioSlots[i].active && !IsSoundPlaying(adapter->audioSlots[i].sound))
+        if (adapter->audioSlots[i].active && !adapter->audioSlots[i].paused && !IsSoundPlaying(adapter->audioSlots[i].sound))
         {
             UnloadSound(adapter->audioSlots[i].sound);
             adapter->audioSlots[i].active = false;
@@ -276,6 +280,7 @@ void AIAudioShutdown(AIAdapter *adapter)
             StopSound(adapter->audioSlots[i].sound);
             UnloadSound(adapter->audioSlots[i].sound);
             adapter->audioSlots[i].active = false;
+            adapter->audioSlots[i].paused = false;
         }
     }
 }

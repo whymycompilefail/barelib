@@ -72,6 +72,7 @@ static int lastKeyUp = -1;
 static int lastMouseX = -1;
 static int lastMouseY = -1;
 static int lastMouseButton = -1;
+static int mouseUpCalls = 0;
 static int lastWheelDX = 0;
 static int lastWheelDY = 0;
 
@@ -83,7 +84,7 @@ static void mockSimulateKeyDown(int key) { lastKeyDown = key; if (keyDownLogCoun
 static void mockSimulateKeyUp(int key) { lastKeyUp = key; }
 static void mockSimulateMouseMove(int x, int y) { lastMouseX = x; lastMouseY = y; }
 static void mockSimulateMouseDown(int button) { lastMouseButton = button; }
-static void mockSimulateMouseUp(int button) { lastMouseButton = button; }
+static void mockSimulateMouseUp(int button) { lastMouseButton = button; mouseUpCalls++; }
 static void mockSimulateMouseWheel(int dx, int dy) { lastWheelDX = dx; lastWheelDY = dy; }
 
 // State snapshot mock (candidate 4): tests fill mockSnapshot with known values
@@ -93,7 +94,7 @@ static void mockGetStateSnapshot(AIStateSnapshot *out) { *out = mockSnapshot; }
 
 // Protocol output capture (spec M5): mock emitProtocol collects every line the
 // command protocol emits; mock requestClose records quit requests.
-static char gEmitBuf[16384];
+static char gEmitBuf[MAX_JSON_STRING + 4096];
 static int gEmitLen = 0;
 static int gRequestCloseCalls = 0;
 
@@ -136,6 +137,7 @@ static void ResetMocks(void)
     lastMouseX = -1;
     lastMouseY = -1;
     lastMouseButton = -1;
+    mouseUpCalls = 0;
     lastWheelDX = 0;
     lastWheelDY = 0;
     keyDownLogCount = 0;
@@ -864,7 +866,171 @@ static void TestProtocolCommands(void)
     TEST("multi-command: processed in order", strstr(gEmitBuf, "<<AI_OK>> paused") != NULL &&
          strstr(gEmitBuf, "elements: 0") != NULL && strstr(gEmitBuf, "<<AI_HELP>>") != NULL);
 
+    // B4/T5: the end marker must survive a scene payload that fills the JSON buffer
+    AIClearElements(adapter);
+    AIDrawElement big = { 0 };
+    big.type = AI_DRAW_TEXT;
+    big.fontSize = 20;
+    big.color = (Color){ 255, 255, 255, 255 };
+    for (int i = 0; i < 127; i++) big.text[i] = 'A';
+    big.text[127] = '\0';
+    for (int i = 0; i < MAX_AI_ELEMENTS; i++) AIAddElement(adapter, &big);
+    FeedCommand(adapter, "scene");
+    AIProcessCommands(adapter);
+    TEST("scene large: payload fills JSON buffer", gEmitLen > 60000);
+    TEST("scene large: end marker intact", strstr(gEmitBuf, "<<AI_SCENE_END>>") != NULL);
+
+    // B5: rotation is part of the observable scene for rects and textures
+    AIClearElements(adapter);
+    AIDrawElement rect = { 0 };
+    rect.type = AI_DRAW_RECT;
+    rect.x = 10; rect.y = 10; rect.w = 20; rect.h = 20; rect.rotation = 45.0f;
+    rect.color = (Color){ 255, 0, 0, 255 };
+    AIAddElement(adapter, &rect);
+    FeedCommand(adapter, "scene");
+    AIProcessCommands(adapter);
+    TEST("scene JSON: rect rotation serialized", strstr(gEmitBuf, "\"rotation\": 45.0") != NULL);
+
     AIClose(adapter);
+}
+
+// C1/T3: diff must surface text and rotation changes, not just geometry
+static void TestSnapshotDiffFields(void)
+{
+    TEST_SECTION("Snapshot diff: text/rotation fields (C1/T3)");
+
+    AIAdapter *adapter = AIInitEx(&mockDeps);
+    ResetMocks();
+    AIClearElements(adapter);
+
+    AIDrawElement text = { 0 };
+    text.type = AI_DRAW_TEXT;
+    text.x = 10; text.y = 10; text.fontSize = 20;
+    strcpy(text.text, "100");
+    text.color = (Color){ 255, 255, 255, 255 };
+
+    AIDrawElement rect = { 0 };
+    rect.type = AI_DRAW_RECT;
+    rect.w = 10; rect.h = 10;
+    rect.color = (Color){ 255, 0, 0, 255 };
+
+    AIAddElement(adapter, &text);
+    AIAddElement(adapter, &rect);
+    AISaveSnapshot(adapter);
+
+    strcpy(adapter->elements[0].text, "101");
+    adapter->elements[1].rotation = 45.0f;
+
+    const char *diff = AIGetSnapshotDiff(adapter);
+    TEST("diff: text + rotation counted as 2 changes", strstr(diff, "\"changed\": 2") != NULL);
+    TEST("diff: old/new text visible", strstr(diff, "\"old_text\": \"100\"") != NULL &&
+         strstr(diff, "\"new_text\": \"101\"") != NULL);
+    TEST("diff: rotation visible", strstr(diff, "\"new_rotation\": 45.0") != NULL);
+
+    AIClose(adapter);
+}
+
+// C4: registry is truly circular once full; old entries keep working
+static void TestTextureRegistry(void)
+{
+    TEST_SECTION("Texture registry circular overwrite (C4)");
+
+    AIAdapter *adapter = AIInitEx(&mockDeps);
+    char path[64];
+    for (int i = 1; i <= MAX_AI_TEXTURE_REGISTRY + 1; i++)
+    {
+        snprintf(path, sizeof(path), "tex%d.png", i);
+        AIRegisterTexture(adapter, (unsigned int)i, path);
+    }
+
+    TEST("registry: newest entry kept", strcmp(AILookupTexturePath(adapter, MAX_AI_TEXTURE_REGISTRY + 1), "tex257.png") == 0);
+    TEST("registry: oldest overwritten", strcmp(AILookupTexturePath(adapter, 1), "unknown") == 0);
+    TEST("registry: second entry kept", strcmp(AILookupTexturePath(adapter, 2), "tex2.png") == 0);
+
+    AIClose(adapter);
+}
+
+// C5/C6: postmessage click defers the release; non-ASCII typing is rejected
+static void TestPostMessageInput(void)
+{
+    TEST_SECTION("PostMessage input (C5/C6)");
+
+    AIAdapter *adapter = AIInitEx(&mockDeps);
+    ResetMocks();
+    adapter->inputMode = AI_SIMULATE_POSTMESSAGE;
+
+    AIInjectInput(adapter, "click 10 20");
+    TEST("postmessage click: down sent immediately", lastMouseButton == 0);
+    TEST("postmessage click: up deferred one frame", adapter->pendingMouseUp == 0 && mouseUpCalls == 0);
+
+    AIInjectInput(adapter, "type \xe4\xb8\xad\xe6\x96\x87");
+    TEST("type: non-ASCII rejected", adapter->lastErrorCode == AI_ERR_BAD_ARGUMENT);
+    TEST("type: no key injected", lastKeyDown == -1);
+
+    AIClose(adapter);
+}
+
+// C3/T6: arbitrary window titles must not break the JSON document
+static void TestStateJSONEscaping(void)
+{
+    TEST_SECTION("State JSON escaping (C3/T6)");
+
+    AIAdapter *adapter = AIInitEx(&mockDeps);
+    ResetMocks();
+    mockSnapshot.title = "He said \"hi\" \\ path\nline2";
+
+    const char *json = AIGetWindowStateJSON(adapter);
+    TEST("title: quotes escaped", strstr(json, "\\\"hi\\\"") != NULL);
+    TEST("title: backslash escaped", strstr(json, "\\\\ path") != NULL);
+    TEST("title: newline escaped", strstr(json, "\\nline2") != NULL);
+
+    AIClose(adapter);
+}
+
+// T4: a paused procedural sound must survive AIAudioUpdate's auto-recycle and
+// keep its slot until resumed or stopped. Requires a real audio device: skips
+// (passes trivially) on headless machines where InitAudioDevice fails.
+static void TestPausedAudioRetention(void)
+{
+    TEST_SECTION("Paused audio slot retention (T4)");
+
+    if (!IsAudioDeviceReady()) InitAudioDevice();
+    if (!IsAudioDeviceReady())
+    {
+        TEST("skipped: no audio device available", true);
+        return;
+    }
+
+    AIAdapter *adapter = AIInit();
+    int handle = AIPlayTone(adapter, 440.0f, 1.0f, 0.5f, AI_WAVEFORM_SINE, 0);
+    TEST("tone started with valid handle", handle > 0);
+    TEST("slot is active", adapter->audioSlots[handle - 1].active);
+
+    AIPauseAudio(adapter, handle);
+    for (int i = 0; i < 30; i++) AIAudioUpdate(adapter);   // 30 frames paused
+
+    TEST("paused slot survives 30 updates", adapter->audioSlots[handle - 1].active);
+    TEST("paused flag retained", adapter->audioSlots[handle - 1].paused);
+    TEST("paused sound reports not playing", IsAIAudioPlaying(adapter, handle) == false);
+
+    AIResumeAudio(adapter, handle);
+    TEST("resume keeps slot active", adapter->audioSlots[handle - 1].active && !adapter->audioSlots[handle - 1].paused);
+
+    AIStopAudio(adapter, handle);
+    AIClose(adapter);
+    CloseAudioDevice();
+}
+
+// B1/T1: audio state is only allocated by InitAudioDevice(); every public entry
+// point must be safe to call without it (AI `state` on audio-less games crashed)
+static void TestAudioDeviceGuards(void)
+{
+    TEST_SECTION("Audio device guards (B1)");
+
+    TEST("IsAudioDeviceReady without InitAudioDevice returns false", IsAudioDeviceReady() == false);
+    TEST("GetMasterVolume without device returns 0", GetMasterVolume() == 0.0f);
+    SetMasterVolume(0.5f);  // must be a no-op, not a NULL dereference
+    TEST("SetMasterVolume without device does not crash", true);
 }
 
 static void TestObserverOwnership(void)
@@ -1016,6 +1182,12 @@ int main(void)
     TestObserverOwnership();
     TestStateSnapshotJSON();
     TestProtocolCommands();
+    TestSnapshotDiffFields();
+    TestTextureRegistry();
+    TestPostMessageInput();
+    TestStateJSONEscaping();
+    TestAudioDeviceGuards();
+    TestPausedAudioRetention();
     TestProceduralAudio();
 
     printf("\n========================================\n");

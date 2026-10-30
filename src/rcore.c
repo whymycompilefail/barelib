@@ -29,8 +29,6 @@
 *           - Raspberry Pi 0-5 (DRM/KMS)
 *           - Linux DRM subsystem (KMS mode)
 *           - Embedded devices (with GPU)
-*       > PLATFORM_ANDROID (native NDK):
-*           - Android (ARM, ARM64)
 *       > PLATFORM_MEMORY
 *           - Memory framebuffer output, using software renderer, no OS required
 *
@@ -346,8 +344,6 @@ void InitWindow(int width, int height, const char *title)
     TRACELOG(LOG_INFO, "Platform backend: WEB (HTML5)");
 #elif defined(PLATFORM_DRM)
     TRACELOG(LOG_INFO, "Platform backend: NATIVE DRM");
-#elif defined(PLATFORM_ANDROID)
-    TRACELOG(LOG_INFO, "Platform backend: ANDROID");
 #elif defined(PLATFORM_MEMORY)
     TRACELOG(LOG_INFO, "Platform backend: MEMORY (No OS)");
 #else
@@ -993,7 +989,8 @@ int GetRandomValue(int min, int max)
     int range = (max - min) + 1;
 
     // Degenerate/overflow case: fall back to min (same behavior as "always min" instead of UB)
-    if (range <= 0) value = min;
+    // Also covers ranges larger than RAND_MAX+1, where rejection sampling would loop forever (D7)
+    if ((range <= 0) || ((unsigned long)range > (unsigned long)RAND_MAX + 1UL)) value = min;
     else
     {
         // Rejection sampling to get a uniform integer in [min, max]
@@ -1083,18 +1080,6 @@ void TraceLog(int logType, const char *text, ...)
         return;
     }
 
-#if defined(PLATFORM_ANDROID)
-    switch (logType)
-    {
-        case LOG_TRACE: __android_log_vprint(ANDROID_LOG_VERBOSE, "raylib", text, args); break;
-        case LOG_DEBUG: __android_log_vprint(ANDROID_LOG_DEBUG, "raylib", text, args); break;
-        case LOG_INFO: __android_log_vprint(ANDROID_LOG_INFO, "raylib", text, args); break;
-        case LOG_WARNING: __android_log_vprint(ANDROID_LOG_WARN, "raylib", text, args); break;
-        case LOG_ERROR: __android_log_vprint(ANDROID_LOG_ERROR, "raylib", text, args); break;
-        case LOG_FATAL: __android_log_vprint(ANDROID_LOG_FATAL, "raylib", text, args); break;
-        default: break;
-    }
-#else
     char buffer[MAX_TRACELOG_MSG_LENGTH] = { 0 };
 
     switch (logType)
@@ -1113,7 +1098,6 @@ void TraceLog(int logType, const char *text, ...)
     strcat(buffer, "\n");
     vprintf(buffer, args);
     fflush(stdout);
-#endif
 
     va_end(args);
 
@@ -1125,6 +1109,13 @@ void TraceLog(int logType, const char *text, ...)
 void SetTraceLogCallback(TraceLogCallback callback)
 {
     traceLog = callback;
+}
+
+// Internal: report the currently installed callback (NULL when the default
+// logger is active). Lets the AI adapter chain instead of overwrite it (D1).
+TraceLogCallback GetCurrentTraceLogCallback(void)
+{
+    return traceLog;  // NULL means raylib's built-in logger is active
 }
 
 //----------------------------------------------------------------------------------

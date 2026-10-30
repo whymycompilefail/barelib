@@ -56,7 +56,7 @@ packages/
 *.so.*
 *.dll
 *.h.pch
-./*.obj
+/*.obj
 
 # Ignore SDL libs for testing
 src/external/SDL2
@@ -93,6 +93,9 @@ DerivedData/
 # VSCode project
 .vscode
 .clangd
+
+# Local agent tooling state
+.reasonix/
 
 # Jetbrains project
 .idea/
@@ -133,6 +136,13 @@ src/*.a
 src/*.so
 src/*.dll
 src/*.dll.a
+
+# Generated CJK font data (~81MB; see README / scripts/prepare_cjk_font.py)
+src/cjk_font_data.c
+
+# Python bytecode caches (AI protocol check scripts)
+__pycache__/
+*.pyc
 
 # Tools stuff
 tools/rlparser/rlparser.exe

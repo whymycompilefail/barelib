@@ -82,6 +82,9 @@
 // Write a log entry to a single adapter's circular buffer
 static void AIWriteLogEntry(AIAdapter *adapter, int logLevel, const char *message)
 {
+    // The audio thread also emits TraceLog entries, so every write is serialized (D2)
+    AI_LOG_LOCK(adapter);
+
     AILogEntry *entry = &adapter->logBuffer[adapter->logHead];
     entry->logLevel = logLevel;
 
@@ -100,6 +103,8 @@ static void AIWriteLogEntry(AIAdapter *adapter, int logLevel, const char *messag
 
     adapter->logHead = (adapter->logHead + 1) % MAX_LOG_ENTRIES;
     if (adapter->logCount < MAX_LOG_ENTRIES) adapter->logCount++;
+
+    AI_LOG_UNLOCK(adapter);
 }
 
 // Custom TraceLog callback to capture logs for all registered adapters
@@ -174,6 +179,10 @@ AIAdapter *AIInitEx(AIDeps *deps)
     adapter->lastErrorMessage[0] = '\0';
     adapter->inputMode = AI_SIMULATE_SENDINPUT;
     adapter->pendingKeyUp = -1;
+    adapter->pendingMouseUp = -1;
+#if defined(_WIN32)
+    InitializeCriticalSection(&adapter->logMutex);
+#endif
 
     // Register this adapter in the context's adapter list.
     // Single-adapter premise (candidate 2): the FIRST registered adapter becomes
@@ -196,10 +205,9 @@ AIAdapter *AIInitEx(AIDeps *deps)
     // Install custom log callback on first registration
     if (ctx->aiAdapterCount == 1)
     {
-        // First adapter: save current callback and install our hook
-        // NOTE: raylib's SetTraceLogCallback does not return the old callback,
-        // so we assume the default (NULL) if no custom callback was set
-        ctx->aiSavedLogCallback = NULL;
+        // First adapter: chain the existing callback (which may be a user hook)
+        // and install our logging hook on top instead of clobbering it (D1)
+        ctx->aiSavedLogCallback = GetCurrentTraceLogCallback();
         adapter->deps->setTraceLogCallback(AILogCallback);
     }
 
@@ -285,7 +293,9 @@ void AIClose(AIAdapter *adapter)
         }
     }
 
-    // Free log messages
+    // Free log messages (no callback can fire after the adapter is unregistered;
+    // the log mutex only needs to be destroyed for non-deferred teardown)
+    AI_LOG_LOCK(adapter);
     for (int i = 0; i < adapter->logCount; i++)
     {
         int idx = AI_LOG_INDEX(adapter, i);
@@ -294,6 +304,8 @@ void AIClose(AIAdapter *adapter)
             RL_FREE((void *)adapter->logBuffer[idx].message);
         }
     }
+    adapter->logCount = 0;
+    AI_LOG_UNLOCK(adapter);
 
     // Stop and unload any active procedural audio slots (delegated to ai_audio.c)
     AIAudioShutdown(adapter);
@@ -344,6 +356,9 @@ void AIClose(AIAdapter *adapter)
 
     if (!adapter->deferFree)
     {
+#if defined(_WIN32)
+        DeleteCriticalSection(&adapter->logMutex);
+#endif
         RL_FREE(adapter);
     }
     else
@@ -368,6 +383,13 @@ void AIUpdate(AIAdapter *adapter)
         adapter->deps->simulateKeyUp(adapter->pendingKeyUp);
         adapter->pendingKeyUp = -1;
     }
+    // Same one-frame delay for background mouse clicks: a same-frame down+up
+    // pair is handled by one PollEvents batch and cancels itself out (C5).
+    if (adapter->pendingMouseUp >= 0)
+    {
+        adapter->deps->simulateMouseUp(adapter->pendingMouseUp);
+        adapter->pendingMouseUp = -1;
+    }
 
     // Process pending commands from the stdin reader thread
     AIProcessCommands(adapter);
@@ -384,7 +406,10 @@ void AIUpdate(AIAdapter *adapter)
         const char *json = AIGetSceneJSON(adapter);
         if (json != NULL && json[0] != '\0')
         {
-            printf("<<AI_SCENE_BEGIN>>\n%s\n<<AI_SCENE_END>>\n", json);
+            // Markers on separate lines: the JSON can fill the whole buffer
+            printf("<<AI_SCENE_BEGIN>>\n");
+            printf("%s\n", json);
+            printf("<<AI_SCENE_END>>\n");
             fflush(stdout);
         }
     }
@@ -541,22 +566,41 @@ const AILogEntry *AIGetLogs(AIAdapter *adapter, int *count)
     return adapter->logBuffer;
 }
 
+// Get the most recent log entry in logical order (0 = oldest retained)
+const AILogEntry *AIGetLogAt(AIAdapter *adapter, int index)
+{
+    if (adapter == NULL || index < 0) return NULL;
+
+    AI_LOG_LOCK(adapter);
+    if (index >= adapter->logCount)
+    {
+        AI_LOG_UNLOCK(adapter);
+        return NULL;
+    }
+    // Physical ring order differs from logical order after wrap-around (D3)
+    const AILogEntry *entry = &adapter->logBuffer[AI_LOG_INDEX(adapter, index)];
+    AI_LOG_UNLOCK(adapter);
+    return entry;
+}
+
 // Clear all captured log entries
 void AIClearLogs(AIAdapter *adapter)
 {
     if (adapter == NULL) return;
 
+    AI_LOG_LOCK(adapter);
     for (int i = 0; i < adapter->logCount; i++)
     {
         int idx = AI_LOG_INDEX(adapter, i);
         if (adapter->logBuffer[idx].message != NULL)
         {
             RL_FREE((void *)adapter->logBuffer[idx].message);
+            adapter->logBuffer[idx].message = NULL;
         }
     }
-
     adapter->logCount = 0;
     adapter->logHead = 0;
+    AI_LOG_UNLOCK(adapter);
 }
 
 // Get the most recent error(s) formatted as a JSON string
@@ -567,6 +611,8 @@ const char *AIGetErrorsJSON(AIAdapter *adapter)
     char *json = adapter->jsonBuffer;
     int offset = 0;
     int remaining = sizeof(adapter->jsonBuffer);
+
+    AI_LOG_LOCK(adapter);  // Snapshot the ring while no other thread appends (D2)
 
     AI_JSON_APPEND(json, remaining, offset, "[\n");
 
@@ -596,6 +642,8 @@ const char *AIGetErrorsJSON(AIAdapter *adapter)
     }
 
     AI_JSON_APPEND(json, remaining, offset, "\n]");
+
+    AI_LOG_UNLOCK(adapter);
 
     return json;
 }
@@ -754,6 +802,10 @@ const char *AIGetWindowStateJSON(AIAdapter *adapter)
     if (adapter->deps->getStateSnapshot != NULL) adapter->deps->getStateSnapshot(&snap);
     else AIDefaultGetStateSnapshot(&snap);
 
+    // Window titles are arbitrary user strings: escape before embedding (C3)
+    char escapedTitle[1600] = { 0 };
+    AIEscapeJSON(snap.title ? snap.title : "", escapedTitle, sizeof(escapedTitle));
+
     AI_JSON_APPEND(json, remaining, offset,
         "{\n"
         "  \"title\": \"%s\",\n"
@@ -772,7 +824,7 @@ const char *AIGetWindowStateJSON(AIAdapter *adapter)
         "  \"minimized\": %s,\n"
         "  \"maximized\": %s\n"
         "}",
-        snap.title ? snap.title : "",
+        snap.title ? escapedTitle : "",
         snap.ready ? "true" : "false",
         snap.shouldClose ? "true" : "false",
         snap.resizedLastFrame ? "true" : "false",
@@ -872,9 +924,12 @@ const char *AIGetInputStateJSON(AIAdapter *adapter)
         {
             if (!first) AI_JSON_APPEND(json, remaining, offset, ",");
             first = 0;
+            // Gamepad names are arbitrary driver strings: escape before embedding (C3)
+            char escapedName[800] = { 0 };
+            AIEscapeJSON(snap.gamepadName[g] ? snap.gamepadName[g] : "", escapedName, sizeof(escapedName));
             AI_JSON_APPEND(json, remaining, offset,
                 "\n    {\"ready\": true, \"name\": \"%s\", \"buttonsDown\": [",
-                snap.gamepadName[g] ? snap.gamepadName[g] : "");
+                escapedName);
             int firstBtn = 1;
             for (int b = 0; b < snap.gamepadButtonsCount[g] && offset < remaining; b++)
             {

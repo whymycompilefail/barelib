@@ -523,6 +523,9 @@ void InitAudioDevice(void)
 // Close the audio device for all contexts
 void CloseAudioDevice(void)
 {
+    // Guard: CloseAudioDevice() may be called without InitAudioDevice(), or twice
+    if (GetRaylibContext()->audioState == NULL) return;
+
     if (AUDIO.System.isReady)
     {
         ma_mutex_uninit(&AUDIO.System.lock);
@@ -546,18 +549,26 @@ void CloseAudioDevice(void)
 // Check if device has been initialized successfully
 bool IsAudioDeviceReady(void)
 {
-    return AUDIO.System.isReady;
+    // Guard: audio state is only allocated by InitAudioDevice() (NULL otherwise)
+    AudioData *audio = GetRaylibContext()->audioState;
+    return (audio != NULL) && audio->System.isReady;
 }
 
 // Set master volume (listener)
 void SetMasterVolume(float volume)
 {
+    // Guard: no-op when the audio device was never initialized
+    if (GetRaylibContext()->audioState == NULL) return;
+
     ma_device_set_master_volume(&AUDIO.System.device, volume);
 }
 
 // Get master volume (listener)
 float GetMasterVolume(void)
 {
+    // Guard: return silence when the audio device was never initialized
+    if (GetRaylibContext()->audioState == NULL) return 0.0f;
+
     float volume = 0.0f;
     ma_device_get_master_volume(&AUDIO.System.device, &volume);
     return volume;

@@ -10,7 +10,7 @@ features
 --------
 
 **Core 2D engine**
-  - Windows (desktop) — the authoring/usage platform; Android is a supported target (games can build for Android); other platforms out of scope
+  - Windows (desktop) — the only supported platform (authoring, testing and runtime); other platforms out of scope
   - OpenGL hardware accelerated (1.1, 2.1, 3.3, ES 2.0, ES 3.0)
   - Software renderer backend (no GPU required)
   - 2D shapes, textures, text, and audio
@@ -226,8 +226,8 @@ src/              — Library source (raylib + AI Adapter)
   raylib_ai_input_stubs.c — Non-Windows input stubs
   raylib_context.h      — RaylibContext (global state container)
   raudio_observer.h     — Audio buffer observer (miniaudio-free)
-  platform_android.c    — Android platform backend
-  cjk_font_data.h/.c    — Embedded CJK font data (~13MB)
+  cjk_font_data.h/.c    — Embedded CJK font data (~81MB generated; the .c is git-ignored,
+                          regenerate with: python scripts/prepare_cjk_font.py)
 examples/         — Engine feature examples (upstream raylib samples removed)
   ai_music_demo.c    — Feature showcase: AI-observable music visualizer (AIDrawXXX, CJK HUD, procedural audio)
   ai_shapes_demo.c   — Feature showcase: AI-observable 2D shape gallery (all primitives incl. rounded rect + sector)

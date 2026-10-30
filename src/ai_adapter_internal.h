@@ -146,6 +146,7 @@ typedef struct AIStateSnapshot {
 typedef struct AIAudioSlot {
     Sound sound;                // raylib Sound (static PCM buffer; plays once, no looping)
     bool active;                // Whether this slot is currently in use
+    bool paused;                // Whether playback is paused (paused slots must not be recycled)
     float duration;             // Total duration in seconds
     float volume;               // Current volume (0.0-1.0)
     float pitch;                // Current pitch multiplier (1.0 = base)
@@ -181,6 +182,7 @@ struct AIAdapter {
     // Texture registry (persists across frames; populated by AILoadTexture)
     AITextureEntry textureRegistry[MAX_AI_TEXTURE_REGISTRY];
     int textureRegistryCount;
+    int textureRegistryNext;    // Next slot to overwrite once the registry is full (circular)
 
     // Procedural audio slots (AI-generated sound effects)
     AIAudioSlot audioSlots[MAX_AI_AUDIO_SLOTS];
@@ -202,6 +204,7 @@ struct AIAdapter {
 #if defined(_WIN32)
     HANDLE commandThread;                    // stdin reader thread handle
     CRITICAL_SECTION commandMutex;           // Protects commandQueue
+    CRITICAL_SECTION logMutex;               // Protects logBuffer (audio thread also logs)
 #endif
 
     // Record / playback system
@@ -238,14 +241,19 @@ struct AIAdapter {
     // down+up pair. -1 = no pending key
     AISimulateMode inputMode;                // Active simulation mode
     int pendingKeyUp;                        // Key to release next AIUpdate (-1 = none)
+    int pendingMouseUp;                      // Mouse button to release next AIUpdate (-1 = none)
 };
 
 #if defined(_WIN32)
     #define AI_COMMAND_LOCK(adapter)   EnterCriticalSection(&(adapter)->commandMutex)
     #define AI_COMMAND_UNLOCK(adapter) LeaveCriticalSection(&(adapter)->commandMutex)
+    #define AI_LOG_LOCK(adapter)       EnterCriticalSection(&(adapter)->logMutex)
+    #define AI_LOG_UNLOCK(adapter)     LeaveCriticalSection(&(adapter)->logMutex)
 #else
     #define AI_COMMAND_LOCK(adapter)   (void)(adapter)
     #define AI_COMMAND_UNLOCK(adapter) (void)(adapter)
+    #define AI_LOG_LOCK(adapter)       (void)(adapter)
+    #define AI_LOG_UNLOCK(adapter)     (void)(adapter)
 #endif
 
 //----------------------------------------------------------------------------------
@@ -255,6 +263,10 @@ struct AIAdapter {
 // ai_scene.c — scene subsystem
 void AIAddElement(AIAdapter *adapter, const AIDrawElement *elem);  // called by facade auto-capture
 int AIEscapeJSON(const char *input, char *output, size_t outputSize); // used by facade AIGetErrorsJSON
+
+// Texture registry (cross-unit: tests and facade may probe path lookup)
+void AIRegisterTexture(AIAdapter *adapter, unsigned int textureId, const char *path);
+const char *AILookupTexturePath(AIAdapter *adapter, unsigned int textureId);
 
 // ai_input.c — input subsystem
 const char *AIParseToken(const char *input, char *token, int tokenSize); // shared with ai_protocol.c
@@ -271,6 +283,12 @@ void AIProcessCommands(AIAdapter *adapter);  // called from AIUpdate
 #define AI_MAX_AUDIO_SAMPLES  1000000
 short *GenerateWaveData(int sampleRate, float frequency, float duration, float volume, int waveform, unsigned int seed, int *outSampleCount); // PURE PCM synthesis (unit-testable)
 int AIAllocSlot(AIAdapter *adapter);       // PURE slot allocation (-1 = full)
+int AIPlayTone(AIAdapter *adapter, float frequency, float duration, float volume, int waveform, unsigned int seed);
+int AIPlayNoise(AIAdapter *adapter, float duration, float volume, unsigned int seed);
+void AIStopAudio(AIAdapter *adapter, int handle);
+void AIPauseAudio(AIAdapter *adapter, int handle);
+void AIResumeAudio(AIAdapter *adapter, int handle);
+bool IsAIAudioPlaying(AIAdapter *adapter, int handle);
 void AIAudioUpdate(AIAdapter *adapter);     // Auto-recycle finished slots (called from AIUpdate)
 void AIAudioShutdown(AIAdapter *adapter);   // Stop+unload all slots (called from AIClose)
 

@@ -17,7 +17,7 @@
 
 barelib 是一个**为 AI agent 设计、AI 可观测且 AI 可操作**的 2D 游戏引擎。
 
-- 引擎侧：基于 raylib 深度精简的纯 2D 引擎（约 701 个 API），移除 3D / 着色器 / VR，
+- 引擎侧：基于 raylib 深度精简的纯 2D 引擎（733 个公开 API），移除 3D / 着色器 / VR，
   全程程序化渲染与程序化音效，无美术堆料依赖。
 - 智能侧：通过 AI Adapter 将运行中的游戏暴露为结构化 JSON 场景，并通过
   stdin/stdout 命令协议允许 AI 注入输入、控制游戏循环、录制回放、对比场景差异。
@@ -84,10 +84,10 @@ barelib 是一个**为 AI agent 设计、AI 可观测且 AI 可操作**的 2D �
 | 可观测性 | 场景元素容量 | 硬编码上限，溢出静默丢弃 | 可配置，溢出给出明确错误而非静默截断 ✅ 已实现（`MAX_AI_ELEMENTS` 可覆盖 + JSON `overflow` 字段） |
 | 闭环效率 | 自然语言 → 可玩原型耗时 | 未测定 | 10–40 分钟（P50，源自 §2.1） |
 | 闭环效率 | 单轮 bug 修复（看→改→验） | 未测定 | < 5 分钟 |
-| 质量 | 无窗口单元测试通过率 | test_ai_adapter 62 项断言 100% 通过 | 持续 100%，随能力扩展同步增长 |
+| 质量 | 无窗口单元测试通过率 | test_ai_adapter 190 项断言 100% 通过 | 持续 100%，随能力扩展同步增长 |
 | 协议 | 命令集稳定性 | 1.0（已版本化：`AI_PROTOCOL_VERSION` + JSON `protocol` 字段） | 版本化且向后兼容 |
 | 采纳 | 外部游戏 / 工具接入数 | 0 | 形成可演示的第三方案例 |
-| 精简 | 公开 API 实用度 | 706 个公开 API（2026-08：引擎 641 + AI 层 65） | 每个公开 API 高度实用：变体族/重复族/冷门函数经盘点清单收敛（M4），新 API 需论证必要性，禁止无论证新增 |
+| 精简 | 公开 API 实用度 | 733 个公开 API（2026-10 实测：引擎 669 + AI 层 64） | 每个公开 API 高度实用：变体族/重复族/冷门函数经盘点清单收敛（M4），新 API 需论证必要性，禁止无论证新增 |
 | 精简 | 全部函数量（含内部 static，Windows 实际编译集，固定统计口径） | 949（2026-08：删 platform_web.c 后） | **必须小于原版全部函数量**（原版 ≥1200：公开 922 + rmodels 166 + 各 .c static；本 fork 因删 3D/Shader/精灵而必然更小）——函数量超标即视为"垃圾阻塞"，需盘点清除 |
 
 > 注：标注"未测定"的闭环效率指标（自然语言→原型、单轮修复）需在端到端闭环演示中建立基准，当前仍为开放指标；其余指标已实测达标。
@@ -105,7 +105,7 @@ barelib 是一个**为 AI agent 设计、AI 可观测且 AI 可操作**的 2D �
 - AI 可操作性：stdin 命令循环、单帧步进、暂停/恢复、录制回放、快照 diff；
 - 无窗口可测性：`AIDeps` 依赖注入 + 纯 CPU 单元测试；
 - 中文开箱即用：内嵌 CJK 字体（GB2312 全覆盖）；
-- 平台：**仅 Windows 编写与使用该引擎**（工具链/开发/运行环境为 Windows 桌面）；**Android 为支持的目标平台**（`platform_android.c` + `build_android.yml`，可独立构建）；**Web 后端已删除**（`platform_web.c` 于 M4 清理，非 Windows 代码不再保留）。定位依据：普通开发者不会用 Linux 玩游戏，macOS 用户也不会选择这类 AI 工具；Web/桌面-Linux 不在支持范围。
+- 平台：**仅 Windows 编写、构建与运行**（工具链/开发/运行环境为 Windows 桌面）；**Web 与 Android 后端均已删除**（`platform_web.c` 于 M4 清理，`platform_android.c` 于提交前清理），非 Windows 代码不再保留。定位依据：普通开发者不会用 Linux 玩游戏，macOS 用户也不会选择这类 AI 工具；Web/桌面-Linux/Android 不在支持范围。
 
 ### 4.2 范围外（Out of Scope）
 
@@ -123,7 +123,7 @@ barelib 是一个**为 AI agent 设计、AI 可观测且 AI 可操作**的 2D �
 - **P3 无窗口可测**：核心逻辑不依赖窗口与 GPU，`AIDeps` 注入即测。
 - **P4 程序化内容**：渲染与音效程序化生成，剥离美术依赖，聚焦玩法。
 - **P5 零外部依赖**：构建期无第三方依赖，运行期仅系统 API。
-- **P6 简洁优先**：2D 能力优先，API 精简（≈701 个），变体函数可合并处保持克制。
+- **P6 简洁优先**：2D 能力优先，API 精简（733 个），变体函数可合并处保持克制。
 - **P7 仅 exe 静态编译**：引擎只编译为可执行文件（exe），**不产出 DLL**。代码与构建围绕 exe 的静态链接展开——`RLAPI`/`RMAPI` 恒为空宏（无 import/export 标记），构建系统强制静态库（`add_library(... STATIC ...)`），`compile_game.bat` 无 DLL 拷贝步骤。历史教训：早期 "dll + AI runtime 热重载" 架构是错误方向，已废弃；一切功能（含程序化音频、AI 适配）都必须能在单个静态编译的 exe 内工作。
 
 ---
@@ -185,7 +185,7 @@ barelib 是一个**为 AI agent 设计、AI 可观测且 AI 可操作**的 2D �
 
 - **N1 性能**：AI 观测不得改变游戏语义；场景 JSON 生成不得拖慢主循环（目标 ≤ 1 帧）。
 - **N2 容量**：场景元素缓冲上限可配置；溢出必须返回明确错误。
-- **N3 平台范围**：编写与使用该引擎的平台仅 Windows（桌面）；**Android 为支持的目标平台**（游戏可构建为 Android 应用），但日常开发/测试/AI 工作流只在 Windows 上进行。核心代码保持可移植书写（不引入 Windows-only 依赖到公共 API），非 Windows 的桌面构建（Linux/macOS/Web）不设优先级、不设 CI。
+- **N3 平台范围**：编写、构建与使用该引擎的平台仅 Windows（桌面）；Web、Android 与 Linux/macOS 桌面构建均不设优先级、不设 CI、不提供保证。核心代码保持可移植书写（不引入 Windows-only 依赖到公共 API）。
 - **N4 兼容性**：命令集与 JSON 字段变更必须版本化，保持向后兼容。
 - **N5 测试纪律**：无窗口可测的功能必须有无窗口测试；变更不得降低 100% 通过率。
 
@@ -198,7 +198,7 @@ barelib 是一个**为 AI agent 设计、AI 可观测且 AI 可操作**的 2D �
 | **M1 引擎与核心能力** | 2D 引擎精简；AI Adapter 全能力（C1–C9）；12 个 ctest 测试目标 100% 通过；CJK 字体内嵌 | ✅ 已完成 |
 | **M2 协议稳定化** | 命令集与 JSON 字段版本化（`AI_PROTOCOL_VERSION` + `version` 命令 + JSON `protocol` 字段）✅；错误模型规范化（`AIErrorCode` 枚举 + `<<AI_ERROR>> [code:N]` 输出 + `AIGetLastError()`）✅；容量可配置 + 溢出显式报告（`MAX_AI_ELEMENTS` 可覆盖 + JSON `overflow` 字段）✅；JSON 截断与内存安全（`AI_JSON_APPEND` clamp + 末尾 NUL 终止 + `truncated` 字段 + 金标准 `json.loads` 验证）✅；AI 端协议测试套件（`test_ai_adapter` 扩展至 62 断言 + `tests/ai_protocol_check.py` 端到端 7/7 通过）✅；性能基准（场景 JSON 生成延迟 3.3ms @1024 元素，§3.4 已达标）✅ | ✅ 已完成 |
 | **M3 闭环工具链** | 场景脚本回放基线（regression suite：`tests/ai_scenario_check.py` + `tests/scenarios/basic.json`，8/8 通过）✅；协议回归无头化（`FLAG_WINDOW_HIDDEN` harness，服务器/CI 可跑，8/8 + 7/7 通过）✅；自动"跑测试 → 报告 → 修复"循环工具（`--report` 输出机器可读 JSON：per-step 结果 + 失败 detail/expected/observed，供 AI agent 消费后修复重跑）✅；协议回归接入 ctest（`ai_protocol_scenario`，gpu label，随 `ctest` 一键运行）✅；非侵入式可观测性（自动场景捕获链路：原生 DrawXXX → 引擎观察钩子 → 场景 JSON，零游戏改动；覆盖矩形/圆/文本三大绘制族（DrawRectanglePro/DrawCircleV/DrawTextEx 汇聚点）；`AISetAutoSceneCapture` 显式开关，与 AIDrawXXX wrapper 互斥使用避免重复登记；test_gpu 80 断言验证）✅；多 agent 协作（工具层形态：任何 agent 可调用场景脚本/回归/`--report` 共享会话，无需网络——网络化多会话与 §4.2 无网络约束冲突，明确排除）✅ | ✅ 完成 |
-| **M4 引擎精简** | 盘点：公开 API 逐函数实用度审查（基线：旧版核心函数 704 个（引擎 693 + AI 层 11，盘点底稿已归档删除）），产出保留/合并/删除清单 ✅（对比：已删 56 个 3D/shader/rlgl 立即模式，属正确方向）；**AI 层绘制包装 33→16 表驱动化 ✅**（每 `AIDrawElementType` 一个函数、标量超集参数；`AI_ELEMENT_TYPES` X-macro 统一枚举/类型名/JSON/diff；迁移映射表已完成（33→16 表驱动，底稿已归档删除）；表驱动测试 + 迁移对照测试：test_ai_adapter 79 断言、test_gpu 迁移对照 18 断言全过）；**可理解度恢复：AI Adapter 拆编译单元 ✅**（单文件 2755 行 → 门面 `raylib_ai_adapter.c` 877 行 + 4 个职责单一单元：`ai_scene.c` 858（元素/16 包装/X-macro/JSON/diff）、`ai_audio.c` 232（程序化音频）、`ai_input.c` 318（注入/键名/录制回放）、`ai_protocol.c` 324（命令循环）；共享类型/宏入 `ai_adapter_internal.h`；改一处不再需要读全文件）；**Web 死代码清除 ✅**（`platform_web.c` 119 个函数删除，Android 适配保留 `platform_android.c`）；剩余第三阶段：引擎侧低价值族（rtext 字符串冷门函数、文件系统 OS 级操作——Sound/Music/AudioStream 三结构是游戏音频核心语义，**不是**低价值，仅其 21 个同构控制函数可收拢）；原则落地：每个公开 API 必须高度实用且**自解释**（名字即语义，无隐藏副作用），新增 API 需在 spec 论证必要性；函数量硬指标（全部函数 < 原版）见 §3.4。验收：盘点报告入库 + 精简后清单 + 可理解度清单（命名/副作用/一致性）逐项消除 + 测试通过率不降 + 协议向后兼容 | 🔄 进行中（第一、二阶段完成） |
+| **M4 引擎精简** | 盘点：公开 API 逐函数实用度审查（基线：旧版核心函数 704 个（引擎 693 + AI 层 11，盘点底稿已归档删除）），产出保留/合并/删除清单 ✅（对比：已删 56 个 3D/shader/rlgl 立即模式，属正确方向）；**AI 层绘制包装 33→16 表驱动化 ✅**（每 `AIDrawElementType` 一个函数、标量超集参数；`AI_ELEMENT_TYPES` X-macro 统一枚举/类型名/JSON/diff；迁移映射表已完成（33→16 表驱动，底稿已归档删除）；表驱动测试 + 迁移对照测试：test_ai_adapter 79 断言、test_gpu 迁移对照 18 断言全过）；**可理解度恢复：AI Adapter 拆编译单元 ✅**（单文件 2755 行 → 门面 `raylib_ai_adapter.c` 877 行 + 4 个职责单一单元：`ai_scene.c` 858（元素/16 包装/X-macro/JSON/diff）、`ai_audio.c` 232（程序化音频）、`ai_input.c` 318（注入/键名/录制回放）、`ai_protocol.c` 324（命令循环）；共享类型/宏入 `ai_adapter_internal.h`；改一处不再需要读全文件）；**Web/Android 死代码清除 ✅**（`platform_web.c` 119 个函数与 `platform_android.c` 均已删除，平台范围收敛为 Windows 桌面）；剩余第三阶段：引擎侧低价值族（rtext 字符串冷门函数、文件系统 OS 级操作——Sound/Music/AudioStream 三结构是游戏音频核心语义，**不是**低价值，仅其 21 个同构控制函数可收拢）；原则落地：每个公开 API 必须高度实用且**自解释**（名字即语义，无隐藏副作用），新增 API 需在 spec 论证必要性；函数量硬指标（全部函数 < 原版）见 §3.4。验收：盘点报告入库 + 精简后清单 + 可理解度清单（命名/副作用/一致性）逐项消除 + 测试通过率不降 + 协议向后兼容 | 🔄 进行中（第一、二阶段完成） |
 | **M5 生态与采纳** | 第三方游戏 / 工具接入案例；开发者文档与教程体系；从"零已知缺陷"到"可验证无缺陷"的形式化尝试 | ⬜ 远期 |
 
 > 里程碑验收以 §3.4 指标为准；任一里程碑不得以降低测试通过率或破坏协议兼容为代价。

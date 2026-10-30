@@ -263,6 +263,9 @@ RLAPI int AIGetElementCount(AIAdapter *adapter);
 // Returns a string that should NOT be freed by the caller (owned by the adapter).
 // The JSON includes: screen dimensions and the list of elements registered
 // this frame (via AIDrawXXX wrappers or AIRegisterElement).
+// NOTE: the returned pointer points into the adapter's internal JSON buffer.
+// It stays valid only until the next AIGet*JSON() call (scene/state/diff/errors
+// share the same buffer), so copy the string if you need to keep it (D8).
 RLAPI const char *AIGetSceneJSON(AIAdapter *adapter);
 
 //----------------------------------------------------------------------------------
@@ -326,6 +329,11 @@ RLAPI void AIDrawTexture(Texture2D texture, Rectangle source, float x, float y, 
 // Get all captured log entries since the last call to AIClearLogs()
 // Returns a pointer to an internal array; count is set to the number of entries.
 RLAPI const AILogEntry *AIGetLogs(AIAdapter *adapter, int *count);
+
+// Get log entry by logical index (0 = oldest retained). Returns NULL if out of range.
+// Preferred over AIGetLogs(): after ring wrap-around, physical buffer order != logical order.
+// NOTE: the entry pointer is only valid until the next log write / AIClearLogs().
+RLAPI const AILogEntry *AIGetLogAt(AIAdapter *adapter, int index);
 
 // Clear all captured log entries
 RLAPI void AIClearLogs(AIAdapter *adapter);

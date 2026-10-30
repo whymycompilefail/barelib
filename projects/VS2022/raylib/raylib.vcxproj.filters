@@ -22,9 +22,6 @@
     <ClCompile Include="..\..\..\src\rtextures.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\..\src\platforms\rcore_android.c">
-      <Filter>Source Files\Platform Files</Filter>
-    </ClCompile>
     <ClCompile Include="..\..\..\src\platforms\rcore_desktop_glfw.c">
       <Filter>Source Files\Platform Files</Filter>
     </ClCompile>

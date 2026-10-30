@@ -616,6 +616,9 @@ void DrawRectangleLinesEx(Rectangle rec, float thick, Color color)
 
 // Draw rectangle with rounded edges (fill)
 // NOTE: center-point triangle fan; four straight edges + four corner arcs
+// Rounded shapes are solid-color: every vertex samples the same point of the
+// shapes texture, so custom SetShapesTexture atlases also work (D6)
+#define RL_ROUNDED_VERTEX(x, y) do { rlTexCoord2f(shapeU, shapeV); rlVertex2f((x), (y)); } while (0)
 void DrawRectangleRounded(Rectangle rec, float roundness, int segments, Color color)
 {
     if (roundness < 0.0f) roundness = 0.0f;
@@ -640,14 +643,21 @@ void DrawRectangleRounded(Rectangle rec, float roundness, int segments, Color co
     const float x2 = rec.x + rec.width, y2 = rec.y + rec.height;
     const float cx = (x1 + x2)*0.5f, cy = (y1 + y2)*0.5f;
 
+    // Bind the shapes texture (may be a custom atlas) and sample its center
+    Texture2D shapeTex = GetShapesTexture();
+    Rectangle shapeRect = GetShapesTextureRectangle();
+    float shapeU = (shapeTex.width > 0)? ((shapeRect.x + shapeRect.width*0.5f)/(float)shapeTex.width) : 0.0f;
+    float shapeV = (shapeTex.height > 0)? ((shapeRect.y + shapeRect.height*0.5f)/(float)shapeTex.height) : 0.0f;
+
+    rlSetTexture(shapeTex.id);
     rlBegin(RL_TRIANGLES);
         rlColor4ub(color.r, color.g, color.b, color.a);
 
         // Four straight edges (center + edge endpoints, CCW winding like DrawCircleV)
-        rlVertex2f(cx, cy); rlVertex2f(x2 - radius, y1); rlVertex2f(x1 + radius, y1);
-        rlVertex2f(cx, cy); rlVertex2f(x2, y2 - radius); rlVertex2f(x2, y1 + radius);
-        rlVertex2f(cx, cy); rlVertex2f(x1 + radius, y2); rlVertex2f(x2 - radius, y2);
-        rlVertex2f(cx, cy); rlVertex2f(x1, y1 + radius); rlVertex2f(x1, y2 - radius);
+        RL_ROUNDED_VERTEX(cx, cy); RL_ROUNDED_VERTEX(x2 - radius, y1); RL_ROUNDED_VERTEX(x1 + radius, y1);
+        RL_ROUNDED_VERTEX(cx, cy); RL_ROUNDED_VERTEX(x2, y2 - radius); RL_ROUNDED_VERTEX(x2, y1 + radius);
+        RL_ROUNDED_VERTEX(cx, cy); RL_ROUNDED_VERTEX(x1 + radius, y2); RL_ROUNDED_VERTEX(x2 - radius, y2);
+        RL_ROUNDED_VERTEX(cx, cy); RL_ROUNDED_VERTEX(x1, y1 + radius); RL_ROUNDED_VERTEX(x1, y2 - radius);
 
         // Four corner arcs (center + two arc points per segment)
         // Top-left: arc center (x1+r, y1+r), angles 180..270
@@ -655,36 +665,36 @@ void DrawRectangleRounded(Rectangle rec, float roundness, int segments, Color co
         {
             float a1 = PI + (PI/2.0f)*((float)i/segments);
             float a2 = PI + (PI/2.0f)*((float)(i + 1)/segments);
-            rlVertex2f(cx, cy);
-            rlVertex2f(x1 + radius + cosf(a2)*radius, y1 + radius + sinf(a2)*radius);
-            rlVertex2f(x1 + radius + cosf(a1)*radius, y1 + radius + sinf(a1)*radius);
+            RL_ROUNDED_VERTEX(cx, cy);
+            RL_ROUNDED_VERTEX(x1 + radius + cosf(a2)*radius, y1 + radius + sinf(a2)*radius);
+            RL_ROUNDED_VERTEX(x1 + radius + cosf(a1)*radius, y1 + radius + sinf(a1)*radius);
         }
         // Top-right: arc center (x2-r, y1+r), angles 270..360
         for (int i = 0; i < segments; i++)
         {
             float a1 = PI*1.5f + (PI/2.0f)*((float)i/segments);
             float a2 = PI*1.5f + (PI/2.0f)*((float)(i + 1)/segments);
-            rlVertex2f(cx, cy);
-            rlVertex2f(x2 - radius + cosf(a2)*radius, y1 + radius + sinf(a2)*radius);
-            rlVertex2f(x2 - radius + cosf(a1)*radius, y1 + radius + sinf(a1)*radius);
+            RL_ROUNDED_VERTEX(cx, cy);
+            RL_ROUNDED_VERTEX(x2 - radius + cosf(a2)*radius, y1 + radius + sinf(a2)*radius);
+            RL_ROUNDED_VERTEX(x2 - radius + cosf(a1)*radius, y1 + radius + sinf(a1)*radius);
         }
         // Bottom-right: arc center (x2-r, y2-r), angles 0..90
         for (int i = 0; i < segments; i++)
         {
             float a1 = (PI/2.0f)*((float)i/segments);
             float a2 = (PI/2.0f)*((float)(i + 1)/segments);
-            rlVertex2f(cx, cy);
-            rlVertex2f(x2 - radius + cosf(a2)*radius, y2 - radius + sinf(a2)*radius);
-            rlVertex2f(x2 - radius + cosf(a1)*radius, y2 - radius + sinf(a1)*radius);
+            RL_ROUNDED_VERTEX(cx, cy);
+            RL_ROUNDED_VERTEX(x2 - radius + cosf(a2)*radius, y2 - radius + sinf(a2)*radius);
+            RL_ROUNDED_VERTEX(x2 - radius + cosf(a1)*radius, y2 - radius + sinf(a1)*radius);
         }
         // Bottom-left: arc center (x1+r, y2-r), angles 90..180
         for (int i = 0; i < segments; i++)
         {
             float a1 = PI/2.0f + (PI/2.0f)*((float)i/segments);
             float a2 = PI/2.0f + (PI/2.0f)*((float)(i + 1)/segments);
-            rlVertex2f(cx, cy);
-            rlVertex2f(x1 + radius + cosf(a2)*radius, y2 - radius + sinf(a2)*radius);
-            rlVertex2f(x1 + radius + cosf(a1)*radius, y2 - radius + sinf(a1)*radius);
+            RL_ROUNDED_VERTEX(cx, cy);
+            RL_ROUNDED_VERTEX(x1 + radius + cosf(a2)*radius, y2 - radius + sinf(a2)*radius);
+            RL_ROUNDED_VERTEX(x1 + radius + cosf(a1)*radius, y2 - radius + sinf(a1)*radius);
         }
     rlEnd();
 }
@@ -715,25 +725,34 @@ void DrawRectangleRoundedLines(Rectangle rec, float roundness, int segments, flo
 
     const float x1 = rec.x, y1 = rec.y;
     const float x2 = rec.x + rec.width, y2 = rec.y + rec.height;
-    const float rIn = radius - lineThick;
+    // Inner radius must never go negative: an oversized line thickness would
+    // otherwise produce inverted/invalid arcs (D5)
+    const float rIn = (radius > lineThick) ? (radius - lineThick) : 0.0f;
 
+    // Bind the shapes texture (may be a custom atlas) and sample its center
+    Texture2D shapeTex = GetShapesTexture();
+    Rectangle shapeRect = GetShapesTextureRectangle();
+    float shapeU = (shapeTex.width > 0)? ((shapeRect.x + shapeRect.width*0.5f)/(float)shapeTex.width) : 0.0f;
+    float shapeV = (shapeTex.height > 0)? ((shapeRect.y + shapeRect.height*0.5f)/(float)shapeTex.height) : 0.0f;
+
+    rlSetTexture(shapeTex.id);
     rlBegin(RL_TRIANGLES);
         rlColor4ub(color.r, color.g, color.b, color.a);
 
         // Outline strips. Winding verified per-triangle so every triangle has a
         // negative cross product (visible side, same convention as DrawCircleV).
         // Top edge (outer y1, inner y1+th)
-        rlVertex2f(x1 + radius, y1); rlVertex2f(x1 + radius, y1 + lineThick); rlVertex2f(x2 - radius, y1);
-        rlVertex2f(x2 - radius, y1); rlVertex2f(x1 + radius, y1 + lineThick); rlVertex2f(x2 - radius, y1 + lineThick);
+        RL_ROUNDED_VERTEX(x1 + radius, y1); RL_ROUNDED_VERTEX(x1 + radius, y1 + lineThick); RL_ROUNDED_VERTEX(x2 - radius, y1);
+        RL_ROUNDED_VERTEX(x2 - radius, y1); RL_ROUNDED_VERTEX(x1 + radius, y1 + lineThick); RL_ROUNDED_VERTEX(x2 - radius, y1 + lineThick);
         // Bottom edge (outer y2, inner y2-th)
-        rlVertex2f(x1 + radius, y2); rlVertex2f(x2 - radius, y2); rlVertex2f(x1 + radius, y2 - lineThick);
-        rlVertex2f(x2 - radius, y2); rlVertex2f(x2 - radius, y2 - lineThick); rlVertex2f(x1 + radius, y2 - lineThick);
+        RL_ROUNDED_VERTEX(x1 + radius, y2); RL_ROUNDED_VERTEX(x2 - radius, y2); RL_ROUNDED_VERTEX(x1 + radius, y2 - lineThick);
+        RL_ROUNDED_VERTEX(x2 - radius, y2); RL_ROUNDED_VERTEX(x2 - radius, y2 - lineThick); RL_ROUNDED_VERTEX(x1 + radius, y2 - lineThick);
         // Left edge (outer x1, inner x1+th)
-        rlVertex2f(x1, y1 + radius); rlVertex2f(x1, y2 - radius); rlVertex2f(x1 + lineThick, y1 + radius);
-        rlVertex2f(x1 + lineThick, y1 + radius); rlVertex2f(x1 + lineThick, y2 - radius); rlVertex2f(x1, y2 - radius);
+        RL_ROUNDED_VERTEX(x1, y1 + radius); RL_ROUNDED_VERTEX(x1, y2 - radius); RL_ROUNDED_VERTEX(x1 + lineThick, y1 + radius);
+        RL_ROUNDED_VERTEX(x1 + lineThick, y1 + radius); RL_ROUNDED_VERTEX(x1 + lineThick, y2 - radius); RL_ROUNDED_VERTEX(x1, y2 - radius);
         // Right edge (outer x2, inner x2-th)
-        rlVertex2f(x2, y1 + radius); rlVertex2f(x2 - lineThick, y1 + radius); rlVertex2f(x2, y2 - radius);
-        rlVertex2f(x2, y2 - radius); rlVertex2f(x2 - lineThick, y1 + radius); rlVertex2f(x2 - lineThick, y2 - radius);
+        RL_ROUNDED_VERTEX(x2, y1 + radius); RL_ROUNDED_VERTEX(x2 - lineThick, y1 + radius); RL_ROUNDED_VERTEX(x2, y2 - radius);
+        RL_ROUNDED_VERTEX(x2, y2 - radius); RL_ROUNDED_VERTEX(x2 - lineThick, y1 + radius); RL_ROUNDED_VERTEX(x2 - lineThick, y2 - radius);
 
         // Corner arcs: per segment triangle (outer1, inner1, outer2) + (inner1, inner2, outer2)
         // Top-left (angles 180..270)
@@ -745,8 +764,8 @@ void DrawRectangleRoundedLines(Rectangle rec, float roundness, int segments, flo
             float ox2 = x1 + radius + cosf(a2)*radius, oy2 = y1 + radius + sinf(a2)*radius;
             float ix1 = x1 + rIn + cosf(a1)*rIn, iy1 = y1 + rIn + sinf(a1)*rIn;
             float ix2 = x1 + rIn + cosf(a2)*rIn, iy2 = y1 + rIn + sinf(a2)*rIn;
-            rlVertex2f(ix1, iy1); rlVertex2f(ox1, oy1); rlVertex2f(ix2, iy2);
-            rlVertex2f(ox1, oy1); rlVertex2f(ox2, oy2); rlVertex2f(ix2, iy2);
+            RL_ROUNDED_VERTEX(ix1, iy1); RL_ROUNDED_VERTEX(ox1, oy1); RL_ROUNDED_VERTEX(ix2, iy2);
+            RL_ROUNDED_VERTEX(ox1, oy1); RL_ROUNDED_VERTEX(ox2, oy2); RL_ROUNDED_VERTEX(ix2, iy2);
         }
         // Top-right (angles 270..360)
         for (int i = 0; i < segments; i++)
@@ -757,8 +776,8 @@ void DrawRectangleRoundedLines(Rectangle rec, float roundness, int segments, flo
             float ox2 = x2 - radius + cosf(a2)*radius, oy2 = y1 + radius + sinf(a2)*radius;
             float ix1 = x2 - rIn + cosf(a1)*rIn, iy1 = y1 + rIn + sinf(a1)*rIn;
             float ix2 = x2 - rIn + cosf(a2)*rIn, iy2 = y1 + rIn + sinf(a2)*rIn;
-            rlVertex2f(ix1, iy1); rlVertex2f(ox1, oy1); rlVertex2f(ix2, iy2);
-            rlVertex2f(ox1, oy1); rlVertex2f(ox2, oy2); rlVertex2f(ix2, iy2);
+            RL_ROUNDED_VERTEX(ix1, iy1); RL_ROUNDED_VERTEX(ox1, oy1); RL_ROUNDED_VERTEX(ix2, iy2);
+            RL_ROUNDED_VERTEX(ox1, oy1); RL_ROUNDED_VERTEX(ox2, oy2); RL_ROUNDED_VERTEX(ix2, iy2);
         }
         // Bottom-right (angles 0..90)
         for (int i = 0; i < segments; i++)
@@ -769,8 +788,8 @@ void DrawRectangleRoundedLines(Rectangle rec, float roundness, int segments, flo
             float ox2 = x2 - radius + cosf(a2)*radius, oy2 = y2 - radius + sinf(a2)*radius;
             float ix1 = x2 - rIn + cosf(a1)*rIn, iy1 = y2 - rIn + sinf(a1)*rIn;
             float ix2 = x2 - rIn + cosf(a2)*rIn, iy2 = y2 - rIn + sinf(a2)*rIn;
-            rlVertex2f(ix1, iy1); rlVertex2f(ox1, oy1); rlVertex2f(ix2, iy2);
-            rlVertex2f(ox1, oy1); rlVertex2f(ox2, oy2); rlVertex2f(ix2, iy2);
+            RL_ROUNDED_VERTEX(ix1, iy1); RL_ROUNDED_VERTEX(ox1, oy1); RL_ROUNDED_VERTEX(ix2, iy2);
+            RL_ROUNDED_VERTEX(ox1, oy1); RL_ROUNDED_VERTEX(ox2, oy2); RL_ROUNDED_VERTEX(ix2, iy2);
         }
         // Bottom-left (angles 90..180)
         for (int i = 0; i < segments; i++)
@@ -781,11 +800,12 @@ void DrawRectangleRoundedLines(Rectangle rec, float roundness, int segments, flo
             float ox2 = x1 + radius + cosf(a2)*radius, oy2 = y2 - radius + sinf(a2)*radius;
             float ix1 = x1 + rIn + cosf(a1)*rIn, iy1 = y2 - rIn + sinf(a1)*rIn;
             float ix2 = x1 + rIn + cosf(a2)*rIn, iy2 = y2 - rIn + sinf(a2)*rIn;
-            rlVertex2f(ix1, iy1); rlVertex2f(ox1, oy1); rlVertex2f(ix2, iy2);
-            rlVertex2f(ox1, oy1); rlVertex2f(ox2, oy2); rlVertex2f(ix2, iy2);
+            RL_ROUNDED_VERTEX(ix1, iy1); RL_ROUNDED_VERTEX(ox1, oy1); RL_ROUNDED_VERTEX(ix2, iy2);
+            RL_ROUNDED_VERTEX(ox1, oy1); RL_ROUNDED_VERTEX(ox2, oy2); RL_ROUNDED_VERTEX(ix2, iy2);
         }
     rlEnd();
 }
+#undef RL_ROUNDED_VERTEX
 
 // Draw a polygon of n sides
 void DrawPoly(Vector2 center, int sides, float radius, float rotation, Color color)

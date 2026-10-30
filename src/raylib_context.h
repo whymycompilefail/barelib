@@ -53,6 +53,10 @@ typedef struct AudioData AudioData;
 // Defined in raylib_ai_adapter.h - only pointer types are used here.
 typedef struct AIAdapter AIAdapter;
 
+// Internal: currently installed TraceLog callback (NULL if none). Used by the
+// AI adapter to chain user callbacks instead of clobbering them (D1).
+TraceLogCallback GetCurrentTraceLogCallback(void);
+
 //----------------------------------------------------------------------------------
 // Types and Structures Definition
 //----------------------------------------------------------------------------------

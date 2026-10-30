@@ -4274,27 +4274,26 @@ static rl_float16 rlMatrixToFloatV(Matrix mat)
 // NOTE: When multiplying matrices... the order matters!
 static Matrix rlMatrixMultiply(Matrix left, Matrix right)
 {
-    // Column-major (OpenGL-style) matrix multiplication — matches raymath
-    // MatrixMultiply. The previous row-major implementation produced wrong
-    // MVP (modelview x projection), so nothing rendered. (M4 bugfix)
+    // Column-major (OpenGL-style) matrix multiplication, identical to raymath
+    // MatrixMultiply: 'left' is applied after 'right' (left x right). (M4 bugfix)
     Matrix result = { 0 };
 
-    result.m0 = left.m0*right.m0 + left.m4*right.m1 + left.m8*right.m2 + left.m12*right.m3;
-    result.m1 = left.m1*right.m0 + left.m5*right.m1 + left.m9*right.m2 + left.m13*right.m3;
-    result.m2 = left.m2*right.m0 + left.m6*right.m1 + left.m10*right.m2 + left.m14*right.m3;
-    result.m3 = left.m3*right.m0 + left.m7*right.m1 + left.m11*right.m2 + left.m15*right.m3;
-    result.m4 = left.m0*right.m4 + left.m4*right.m5 + left.m8*right.m6 + left.m12*right.m7;
-    result.m5 = left.m1*right.m4 + left.m5*right.m5 + left.m9*right.m6 + left.m13*right.m7;
-    result.m6 = left.m2*right.m4 + left.m6*right.m5 + left.m10*right.m6 + left.m14*right.m7;
-    result.m7 = left.m3*right.m4 + left.m7*right.m5 + left.m11*right.m6 + left.m15*right.m7;
-    result.m8 = left.m0*right.m8 + left.m4*right.m9 + left.m8*right.m10 + left.m12*right.m11;
-    result.m9 = left.m1*right.m8 + left.m5*right.m9 + left.m9*right.m10 + left.m13*right.m11;
-    result.m10 = left.m2*right.m8 + left.m6*right.m9 + left.m10*right.m10 + left.m14*right.m11;
-    result.m11 = left.m3*right.m8 + left.m7*right.m9 + left.m11*right.m10 + left.m15*right.m11;
-    result.m12 = left.m0*right.m12 + left.m4*right.m13 + left.m8*right.m14 + left.m12*right.m15;
-    result.m13 = left.m1*right.m12 + left.m5*right.m13 + left.m9*right.m14 + left.m13*right.m15;
-    result.m14 = left.m2*right.m12 + left.m6*right.m13 + left.m10*right.m14 + left.m14*right.m15;
-    result.m15 = left.m3*right.m12 + left.m7*right.m13 + left.m11*right.m14 + left.m15*right.m15;
+    result.m0 = left.m0*right.m0 + left.m1*right.m4 + left.m2*right.m8 + left.m3*right.m12;
+    result.m1 = left.m0*right.m1 + left.m1*right.m5 + left.m2*right.m9 + left.m3*right.m13;
+    result.m2 = left.m0*right.m2 + left.m1*right.m6 + left.m2*right.m10 + left.m3*right.m14;
+    result.m3 = left.m0*right.m3 + left.m1*right.m7 + left.m2*right.m11 + left.m3*right.m15;
+    result.m4 = left.m4*right.m0 + left.m5*right.m4 + left.m6*right.m8 + left.m7*right.m12;
+    result.m5 = left.m4*right.m1 + left.m5*right.m5 + left.m6*right.m9 + left.m7*right.m13;
+    result.m6 = left.m4*right.m2 + left.m5*right.m6 + left.m6*right.m10 + left.m7*right.m14;
+    result.m7 = left.m4*right.m3 + left.m5*right.m7 + left.m6*right.m11 + left.m7*right.m15;
+    result.m8 = left.m8*right.m0 + left.m9*right.m4 + left.m10*right.m8 + left.m11*right.m12;
+    result.m9 = left.m8*right.m1 + left.m9*right.m5 + left.m10*right.m9 + left.m11*right.m13;
+    result.m10 = left.m8*right.m2 + left.m9*right.m6 + left.m10*right.m10 + left.m11*right.m14;
+    result.m11 = left.m8*right.m3 + left.m9*right.m7 + left.m10*right.m11 + left.m11*right.m15;
+    result.m12 = left.m12*right.m0 + left.m13*right.m4 + left.m14*right.m8 + left.m15*right.m12;
+    result.m13 = left.m12*right.m1 + left.m13*right.m5 + left.m14*right.m9 + left.m15*right.m13;
+    result.m14 = left.m12*right.m2 + left.m13*right.m6 + left.m14*right.m10 + left.m15*right.m14;
+    result.m15 = left.m12*right.m3 + left.m13*right.m7 + left.m14*right.m11 + left.m15*right.m15;
 
     return result;
 }

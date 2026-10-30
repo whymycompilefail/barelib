@@ -21,11 +21,9 @@
 //----------------------------------------------------------------------------------
 // Element type knowledge — single source of truth (X-macro list):
 //   X(type, json_type_name, field_flags)
-// Drives the JSON "type" name, scene serialization and snapshot diff.
-//----------------------------------------------------------------------------------
-// Element type knowledge — single source of truth (X-macro list):
-//   X(type, json_type_name, field_flags)
-// Drives the JSON "type" name, scene serialization and snapshot diff.
+// Drives the JSON "type" name and the field set compared by snapshot diff
+// (AIElementChanged). Scene serialization stays explicit per type because each
+// type has a different key layout, but its fields must match these flags.
 //----------------------------------------------------------------------------------
 #define AI_HAS_SIZE      (1 << 0)   // w/h fields are meaningful
 #define AI_HAS_RADIUS    (1 << 1)   // radius field
@@ -38,7 +36,7 @@
 
 #define AI_ELEMENT_TYPES(X) \
     X(AI_DRAW_CLEAR,         "clear",         0) \
-    X(AI_DRAW_RECT,          "rect",          AI_HAS_SIZE) \
+    X(AI_DRAW_RECT,          "rect",          AI_HAS_SIZE|AI_HAS_ROTATION) \
     X(AI_DRAW_RECT_LINES,    "rect_lines",    AI_HAS_SIZE) \
     X(AI_DRAW_RECT_ROUNDED,  "rect_rounded",  AI_HAS_SIZE|AI_HAS_RADIUS) \
     X(AI_DRAW_CIRCLE,        "circle",        AI_HAS_RADIUS) \
@@ -58,6 +56,18 @@
 #define AI_GEN_NAME(type, name, flags) name,
 static const char *aiElementTypeNames[] = { AI_ELEMENT_TYPES(AI_GEN_NAME) };
 
+// Per-type field flags (generated from the same list; used by snapshot diff)
+#define AI_GEN_FLAGS(type, name, flags) flags,
+static const int aiElementTypeFlags[] = { AI_ELEMENT_TYPES(AI_GEN_FLAGS) };
+
+static int AIElementFieldFlags(AIDrawElementType type)
+{
+    int index = (int)type;
+    int count = (int)(sizeof(aiElementTypeFlags)/sizeof(aiElementTypeFlags[0]));
+    if ((index < 0) || (index >= count)) return 0;
+    return aiElementTypeFlags[index];
+}
+
 static AIAdapter *AIGetActiveAdapter(void)
 {
     RaylibContext *ctx = GetRaylibContext();
@@ -73,7 +83,7 @@ static AIAdapter *AIGetActiveAdapter(void)
     #endif
 }
 
-static const char *AILookupTexturePath(AIAdapter *adapter, unsigned int textureId)
+const char *AILookupTexturePath(AIAdapter *adapter, unsigned int textureId)
 {
     if (adapter == NULL) return "unknown";
     for (int i = 0; i < adapter->textureRegistryCount; i++)
@@ -86,7 +96,7 @@ static const char *AILookupTexturePath(AIAdapter *adapter, unsigned int textureI
     return "unknown";
 }
 
-static void AIRegisterTexture(AIAdapter *adapter, unsigned int textureId, const char *path)
+void AIRegisterTexture(AIAdapter *adapter, unsigned int textureId, const char *path)
 {
     if (adapter == NULL || path == NULL) return;
 
@@ -103,8 +113,9 @@ static void AIRegisterTexture(AIAdapter *adapter, unsigned int textureId, const 
     int slot = adapter->textureRegistryCount;
     if (slot >= MAX_AI_TEXTURE_REGISTRY)
     {
-        slot = 0;  // Overwrite oldest (simple circular)
-        adapter->textureRegistryCount = 0;
+        // Truly circular: overwrite the oldest entry, keep the rest addressable
+        slot = adapter->textureRegistryNext;
+        adapter->textureRegistryNext = (slot + 1) % MAX_AI_TEXTURE_REGISTRY;
     }
     adapter->textureRegistry[slot].id = textureId;
     strncpy(adapter->textureRegistry[slot].path, path, 255);
@@ -230,8 +241,8 @@ const char *AIGetSceneJSON(AIAdapter *adapter)
             break;
         case AI_DRAW_RECT:
             AI_JSON_APPEND(json, remaining, offset,
-                "    {\"type\": \"%s\", \"x\": %.1f, \"y\": %.1f, \"w\": %.1f, \"h\": %.1f, \"color\": [%d, %d, %d, %d]}",
-                aiElementTypeNames[e->type], e->x, e->y, e->w, e->h, c.r, c.g, c.b, c.a);
+                "    {\"type\": \"%s\", \"x\": %.1f, \"y\": %.1f, \"w\": %.1f, \"h\": %.1f, \"rotation\": %.1f, \"color\": [%d, %d, %d, %d]}",
+                aiElementTypeNames[e->type], e->x, e->y, e->w, e->h, e->rotation, c.r, c.g, c.b, c.a);
             break;
         case AI_DRAW_RECT_LINES:
             AI_JSON_APPEND(json, remaining, offset,
@@ -290,8 +301,8 @@ const char *AIGetSceneJSON(AIAdapter *adapter)
             char escapedSource[300];
             AIEscapeJSON(e->source, escapedSource, sizeof(escapedSource));
             AI_JSON_APPEND(json, remaining, offset,
-                "    {\"type\": \"%s\", \"x\": %.1f, \"y\": %.1f, \"w\": %.1f, \"h\": %.1f, \"source\": \"%s\", \"tint\": [%d, %d, %d, %d]}",
-                aiElementTypeNames[e->type], e->x, e->y, e->w, e->h, escapedSource, c.r, c.g, c.b, c.a);
+                "    {\"type\": \"%s\", \"x\": %.1f, \"y\": %.1f, \"w\": %.1f, \"h\": %.1f, \"rotation\": %.1f, \"source\": \"%s\", \"tint\": [%d, %d, %d, %d]}",
+                aiElementTypeNames[e->type], e->x, e->y, e->w, e->h, e->rotation, escapedSource, c.r, c.g, c.b, c.a);
             break;
         }
         case AI_DRAW_LINE:
@@ -721,6 +732,33 @@ int AIGetSnapshotCount(AIAdapter *adapter)
     return (adapter != NULL) ? adapter->snapshotCount : 0;
 }
 
+// Semantic comparison between the live scene and its snapshot. Which extra
+// fields matter is decided by the type's X-macro flags, so text/rotation/sides
+// changes are no longer silently ignored (see C1/C2 in docs/improvement-plan.md).
+static bool AIElementChanged(const AIDrawElement *c, const AIDrawElement *s)
+{
+    if (c->type != s->type) return true;
+
+    int flags = AIElementFieldFlags(c->type);
+
+    if ((c->x != s->x) || (c->y != s->y) || (c->w != s->w) || (c->h != s->h)) return true;
+    if (c->radius != s->radius) return true;
+    if ((c->color.r != s->color.r) || (c->color.g != s->color.g) ||
+        (c->color.b != s->color.b) || (c->color.a != s->color.a)) return true;
+
+    if ((flags & AI_HAS_TEXT) &&
+        ((c->fontSize != s->fontSize) || (strcmp(c->text, s->text) != 0))) return true;
+    if ((flags & AI_HAS_ROTATION) && (c->rotation != s->rotation)) return true;
+    if ((flags & AI_HAS_SIDES) && (c->sides != s->sides)) return true;
+    // Circle sector stores startAngle/endAngle in rotation/sides
+    if ((flags & AI_HAS_SECTOR) && ((c->rotation != s->rotation) || (c->sides != s->sides))) return true;
+    if ((flags & AI_HAS_POINTS) &&
+        ((c->x2 != s->x2) || (c->y2 != s->y2) || (c->x3 != s->x3) || (c->y3 != s->y3))) return true;
+    if ((flags & AI_HAS_SOURCE) && (strcmp(c->source, s->source) != 0)) return true;
+
+    return false;
+}
+
 const char *AIGetSnapshotDiff(AIAdapter *adapter)
 {
     if (adapter == NULL) return "{}";
@@ -741,15 +779,7 @@ const char *AIGetSnapshotDiff(AIAdapter *adapter)
     {
         AIDrawElement *c = &adapter->elements[i];
         AIDrawElement *s = &adapter->snapshotElements[i];
-        if (c->type != s->type ||
-            c->x != s->x || c->y != s->y ||
-            c->w != s->w || c->h != s->h ||
-            c->radius != s->radius ||
-            c->color.r != s->color.r || c->color.g != s->color.g ||
-            c->color.b != s->color.b || c->color.a != s->color.a)
-        {
-            changed++;
-        }
+        if (AIElementChanged(c, s)) changed++;
     }
 
     AI_JSON_APPEND(buf, remaining, offset,
@@ -764,28 +794,39 @@ const char *AIGetSnapshotDiff(AIAdapter *adapter)
         AIDrawElement *c = &adapter->elements[i];
         AIDrawElement *s = &adapter->snapshotElements[i];
 
-        bool isChanged = (c->type != s->type ||
-            c->x != s->x || c->y != s->y ||
-            c->w != s->w || c->h != s->h ||
-            c->radius != s->radius ||
-            c->color.r != s->color.r || c->color.g != s->color.g ||
-            c->color.b != s->color.b || c->color.a != s->color.a);
+        bool isChanged = AIElementChanged(c, s);
 
         if (isChanged)
         {
+            char oldText[800] = { 0 };
+            char newText[800] = { 0 };
+            if (AIElementFieldFlags(c->type) & AI_HAS_TEXT)
+            {
+                AIEscapeJSON(s->text, oldText, sizeof(oldText));
+                AIEscapeJSON(c->text, newText, sizeof(newText));
+            }
+
             if (detailCount > 0) AI_JSON_APPEND(buf, remaining, offset, ", ");
             AI_JSON_APPEND(buf, remaining, offset,
                 "{\"index\": %d, \"action\": \"changed\", \"old_type\": \"%s\", \"new_type\": \"%s\", "
                 "\"old_pos\": [%.1f, %.1f], \"new_pos\": [%.1f, %.1f], "
                 "\"old_size\": [%.1f, %.1f], \"new_size\": [%.1f, %.1f], "
                 "\"old_radius\": %.1f, \"new_radius\": %.1f, "
-                "\"old_color\": [%d, %d, %d, %d], \"new_color\": [%d, %d, %d, %d]}",
+                "\"old_color\": [%d, %d, %d, %d], \"new_color\": [%d, %d, %d, %d], "
+                "\"old_text\": \"%s\", \"new_text\": \"%s\", "
+                "\"old_rotation\": %.1f, \"new_rotation\": %.1f, "
+                "\"old_font_size\": %d, \"new_font_size\": %d, "
+                "\"old_sides\": %d, \"new_sides\": %d}",
                 i, AIElementTypeStr(s->type), AIElementTypeStr(c->type),
                 s->x, s->y, c->x, c->y,
                 s->w, s->h, c->w, c->h,
                 s->radius, c->radius,
                 s->color.r, s->color.g, s->color.b, s->color.a,
-                c->color.r, c->color.g, c->color.b, c->color.a);
+                c->color.r, c->color.g, c->color.b, c->color.a,
+                oldText, newText,
+                s->rotation, c->rotation,
+                s->fontSize, c->fontSize,
+                s->sides, c->sides);
             detailCount++;
         }
     }
