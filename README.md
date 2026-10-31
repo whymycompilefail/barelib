@@ -227,7 +227,10 @@ src/              — Library source (raylib + AI Adapter)
   raylib_context.h      — RaylibContext (global state container)
   raudio_observer.h     — Audio buffer observer (miniaudio-free)
   cjk_font_data.h/.c    — Embedded CJK font data (~81MB generated; the .c is git-ignored,
-                          regenerate with: python scripts/prepare_cjk_font.py)
+                          CMake regenerates it offline from src/fonts/cjk_subset.ttf with
+                          scripts/embed_font_data.py — Python 3 stdlib only, no network/pip)
+  fonts/cjk_subset.ttf  — Tracked subset font (Sarasa Gothic SC Regular, SIL OFL 1.1);
+                          re-subset with scripts/prepare_cjk_font.py (needs network + pip)
 examples/         — Engine feature examples (upstream raylib samples removed)
   ai_music_demo.c    — Feature showcase: AI-observable music visualizer (AIDrawXXX, CJK HUD, procedural audio)
   ai_shapes_demo.c   — Feature showcase: AI-observable 2D shape gallery (all primitives incl. rounded rect + sector)

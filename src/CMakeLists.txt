@@ -43,23 +43,27 @@ set(raylib_public_headers
     )
 
 # Sources to be compiled
-# The embedded CJK font is a ~81MB generated source file (git-ignored). Regenerate
-# it on demand so a fresh clone still builds (requires pip: requests py7zr fonttools).
+# The embedded CJK font is a ~81MB generated source file (git-ignored). The
+# subset TTF is tracked, and generation uses only the Python standard library:
+# no network access or pip packages are required for a fresh clone.
 if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/cjk_font_data.c")
-    message(STATUS "cjk_font_data.c missing, generating embedded CJK font...")
+    message(STATUS "cjk_font_data.c missing, embedding src/fonts/cjk_subset.ttf...")
     find_package(Python3 COMPONENTS Interpreter QUIET)
     if(Python3_Interpreter_FOUND)
         execute_process(
-            COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/scripts/prepare_cjk_font.py"
+            COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/scripts/embed_font_data.py"
+                    "${CMAKE_CURRENT_SOURCE_DIR}/fonts/cjk_subset.ttf"
+                    "${CMAKE_CURRENT_SOURCE_DIR}/cjk_font_data.c"
             WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
             RESULT_VARIABLE CJK_FONT_RESULT)
         if(NOT CJK_FONT_RESULT EQUAL 0)
-            message(FATAL_ERROR "Font generation failed. Install deps (pip install requests py7zr fonttools) "
-                                "and run: python scripts/prepare_cjk_font.py")
+            message(FATAL_ERROR "Font embedding failed (standard-library Python is enough). "
+                                "Run: python scripts/embed_font_data.py src/fonts/cjk_subset.ttf src/cjk_font_data.c")
         endif()
     else()
         message(FATAL_ERROR "src/cjk_font_data.c is missing and Python3 was not found. "
-                            "Install Python 3 and run: python scripts/prepare_cjk_font.py")
+                            "Install Python 3 (standard library only) and run: "
+                            "python scripts/embed_font_data.py src/fonts/cjk_subset.ttf src/cjk_font_data.c")
     endif()
 endif()
 
