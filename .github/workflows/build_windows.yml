@@ -77,7 +77,7 @@ jobs:
         cd ${{ env.RELEASE_NAME }}
         mkdir include
         mkdir lib
-        cd ../../../raylib
+        cd $env:GITHUB_WORKSPACE
 
     # Setup MSBuild.exe path if required
     - name: Setup MSBuild

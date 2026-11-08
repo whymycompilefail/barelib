@@ -75,5 +75,8 @@ jobs:
         shell: powershell
         # Execute tests defined by the CMake configuration.
         # See https://cmake.org/cmake/help/latest/manual/ctest.1.html for more detail
-        run: ctest -C $env:BUILD_TYPE
+        # GitHub-hosted runners have no OpenGL 3.3 context, so GPU tests
+        # (labelled "gpu": test_gpu, ai_protocol_scenario) cannot run here.
+        # They still run locally / on self-hosted runners with a real GPU.
+        run: ctest -C $env:BUILD_TYPE -LE gpu --output-on-failure
 
