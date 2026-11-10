@@ -14,6 +14,7 @@
 #include "raylib.h"
 #include "raylib_observability.h"
 #include "raylib_ai_adapter.h"
+#include "raylib_ai_sprite.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -738,6 +739,60 @@ static void TestActiveAdapterWrappers(void)
     AIClose(b);
 }
 
+// End-to-end: load a real atlas PNG + sheet JSON through AILoadSpriteSheet,
+// play a tag and draw it inside an active adapter.
+static void TestSpriteSheetEndToEnd(void)
+{
+    TEST_SECTION("Sprite Sheet End To End");
+
+    Image atlas = GenImageColor(32, 16, BLANK);
+    ImageDrawRectanglePro(&atlas, (Rectangle){ 0, 0, 16, 16 }, (Vector2){ 0, 0 }, 0.0f, RED);
+    ImageDrawRectanglePro(&atlas, (Rectangle){ 16, 0, 16, 16 }, (Vector2){ 0, 0 }, 0.0f, BLUE);
+    TEST("Atlas exported", ExportImage(atlas, "sprite_e2e.png"));
+    UnloadImage(atlas);
+
+    const char *sheet =
+        "{\"image\":\"sprite_e2e.png\","
+        "\"frames\":["
+        "{\"index\":0,\"source_index\":0,\"x\":0,\"y\":0,\"width\":16,\"height\":16,\"duration_ms\":100},"
+        "{\"index\":1,\"source_index\":1,\"x\":16,\"y\":0,\"width\":16,\"height\":16,\"duration_ms\":100}"
+        "],"
+        "\"tags\":[{\"name\":\"run\",\"start\":0,\"end\":1,\"direction\":\"forward\"}],"
+        "\"canvas\":{\"width\":16,\"height\":16}}";
+    SaveFileText("sprite_e2e.json", (char *)sheet);
+
+    AISprite *sprite = AILoadSpriteSheet("sprite_e2e.json");
+    TEST("Sheet loads with texture", sprite != NULL && sprite->texture.id != 0);
+    if (sprite != NULL)
+    {
+        TEST("Sheet frame count", AISpriteFrameCount(sprite) == 2);
+        TEST("Sheet atlas path resolves", strstr(sprite->imagePath, "sprite_e2e.png") != NULL);
+        TEST("Tag plays", AISpritePlay(sprite, "run"));
+
+        AIAdapter *adapter = AIInit();
+        TEST("Adapter for sprite scene", adapter != NULL);
+        if (adapter != NULL)
+        {
+            BeginDrawing();
+            ClearBackground(BLACK);
+            AISpriteDraw(sprite, 8, 8, 4, false, WHITE);
+            EndDrawing();
+
+            const char *json = AIGetSceneJSON(adapter);
+            TEST("Sprite draw recorded", strstr(json, "\"type\": \"sprite\"") != NULL);
+            TEST("Sprite frame recorded", strstr(json, "\"frame\": 0") != NULL);
+            AIClose(adapter);
+        }
+
+        AISpriteUpdate(sprite, 0.11f);
+        TEST("Sprite advances after one frame duration", AISpriteCurrentFrame(sprite) == 1);
+        AIUnloadSpriteSheet(sprite);
+    }
+
+    remove("sprite_e2e.png");
+    remove("sprite_e2e.json");
+}
+
 int main(void)
 {
     SetTraceLogLevel(LOG_WARNING);
@@ -774,6 +829,7 @@ int main(void)
     TestObserverBridgeShapes();
     TestActiveAdapterWrappers();
     TestM4SlimWrappers();
+    TestSpriteSheetEndToEnd();
 
     // Clean up
     CloseWindow();

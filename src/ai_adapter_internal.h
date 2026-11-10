@@ -262,6 +262,7 @@ struct AIAdapter {
 
 // ai_scene.c — scene subsystem
 void AIAddElement(AIAdapter *adapter, const AIDrawElement *elem);  // called by facade auto-capture
+AIAdapter *AIGetActiveAdapterInternal(void);  // adapter the AIDrawXXX wrappers record into, or NULL
 int AIEscapeJSON(const char *input, char *output, size_t outputSize); // used by facade AIGetErrorsJSON
 
 // Texture registry (cross-unit: tests and facade may probe path lookup)

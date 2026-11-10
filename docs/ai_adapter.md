@@ -366,6 +366,40 @@ In `postmessage` mode, `press` and `click` delay the release by one frame (flush
 
 Waveforms: `AI_WAVEFORM_SINE`, `AI_WAVEFORM_SQUARE`, `AI_WAVEFORM_TRIANGLE`, `AI_WAVEFORM_SAWTOOTH`, `AI_WAVEFORM_NOISE`
 
+### Pixel sprites (`raylib_ai_sprite.h`)
+
+Reads sheet JSON exported by [Pixel Loom](https://github.com/yangsir2077/pixel-loom) (native) or
+Aseprite (JSON hash / JSON array). The engine owns playback state, so the scene JSON always reports
+the frame that is actually on screen.
+
+```c
+AISprite *hero = AILoadSpriteSheet("assets/hero.json");  // atlas PNG resolved next to the JSON
+AISpritePlay(hero, "walk");                              // tags from the sheet; NULL = whole timeline
+
+// game loop
+AISpriteUpdate(hero, GetFrameTime());
+AISpriteDraw(hero, 120, 80, 4, false, WHITE);            // integer scale 4x, no flip
+```
+
+| Function | Description |
+|----------|-------------|
+| `AILoadSpriteSheet(jsonPath)` | Parse sheet JSON, load atlas with `TEXTURE_FILTER_POINT` |
+| `AIParseSpriteSheet(json, size, hint)` | Parse from memory without a texture (headless tests) |
+| `AIUnloadSpriteSheet(sprite)` | Unload texture and free |
+| `AISpritePlay(sprite, tag)` | Play a tag from its first frame; unknown tag returns false |
+| `AISpriteStop(sprite)` | Pause on the current frame |
+| `AISpriteUpdate(sprite, dt)` | Advance by `duration_ms`, honouring the tag direction |
+| `AISpriteIsPlaying(sprite)` | True while advancing |
+| `AISpriteCurrentFrame(sprite)` | Original timeline frame index, or -1 |
+| `AISpriteFrameCount(sprite)` | Frames in the sheet |
+| `AISpriteSeek(sprite, position)` | Jump to a step of the expanded playback order |
+| `AISpriteDraw(sprite, x, y, scale, flipX, tint)` | Draw the current frame and record an `AI_DRAW_SPRITE` element |
+
+Playback order follows Pixel Loom: `forward` = start..end, `reverse` = end..start,
+`pingpong` = start..end then end-1..start+1. Native tags loop by default; an Aseprite tag with a
+`repeat` field plays once and stops on its last frame. `scale` is an integer multiplier
+(nearest filtering + integer scale keep pixel art crisp).
+
 ### Command loop
 
 | Function | Description |
@@ -418,7 +452,15 @@ implementation reads the live core state.
   dropped elements. AI agents must treat an overflowing scene as incomplete.
   The counter resets each frame via `AIClearBackground()`/`AIClearElements()`.
 
-Element types: `clear`, `rect`, `rect_lines`, `circle`, `circle_lines`, `triangle`, `triangle_lines`, `poly`, `poly_lines`, `text`, `texture`, `line`, `pixel`
+Element types: `clear`, `rect`, `rect_lines`, `circle`, `circle_lines`, `triangle`, `triangle_lines`, `poly`, `poly_lines`, `text`, `texture`, `sprite`, `line`, `pixel`
+
+Sprite elements add `sheet` (JSON path), `tag`, `frame`, `frame_count`, `loop`, `scale` and `flip_x`:
+
+```json
+{"type": "sprite", "x": 120.0, "y": 80.0, "w": 128.0, "h": 128.0, "scale": 4,
+ "source": "assets/hero.png", "sheet": "assets/hero.json", "tag": "walk",
+ "frame": 2, "frame_count": 6, "loop": true, "flip_x": false, "tint": [255, 255, 255, 255]}
+```
 
 ### Diff JSON
 

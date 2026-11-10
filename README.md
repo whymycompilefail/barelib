@@ -37,12 +37,15 @@ features
   - **Scene snapshots**: save scene state, diff against current frame to detect changes
   - **Log interception**: capture raylib TraceLog output with timestamps
   - **Procedural audio**: AIPlayTone / AIPlayNoise with 5 waveforms (sine, square, triangle, sawtooth, noise)
+  - **Pixel sprites**: `AILoadSpriteSheet()` reads Pixel Loom / Aseprite sheet JSON, owns tag playback
+    (forward / reverse / pingpong, per-frame durations) and records the live tag + frame in the scene JSON
+    (`AI_DRAW_SPRITE`); atlases load with nearest filtering and draw at integer scale
   - **Backend state query**: window, input, time, audio state as JSON
   - **Dependency injection**: mock AIDeps for testing without a window
   - No network, no external AI runtime — just data your agent can consume
 
 **Designed for testing**
-  - 13 CTest suites, 100% passing (unit + GPU-hidden-window + protocol scenario)
+  - 14 CTest suites, 100% passing (unit + GPU-hidden-window + protocol scenario)
   - GPU tests run in hidden window, no desktop interference
   - Pure CPU functions tested without window or GPU
   - All tests runnable via a single `ctest` command
@@ -219,6 +222,8 @@ src/              — Library source (raylib + AI Adapter)
   raylib_ai_adapter.c   — AI Adapter facade (init/update/close, state JSON)
   ai_scene.c            — Scene elements, 16 AIDrawXXX wrappers, JSON/diff
   ai_audio.c            — Procedural audio (waveforms, tone slots)
+  ai_sprite.c           — Pixel-art sheets (Pixel Loom / Aseprite JSON), tag playback, sprite scene elements
+  raylib_ai_sprite.h    — Sprite sheet public API
   ai_input.c            — Input injection, key names, record/playback
   ai_protocol.c         — stdin command loop
   raylib_ai_input.h     — Platform input simulation interface

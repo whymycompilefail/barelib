@@ -39,6 +39,7 @@ set(raylib_public_headers
     config.h
     raylib_ai_adapter.h
     raylib_ai_input.h
+    raylib_ai_sprite.h
     raylib_observability.h
     )
 
@@ -102,6 +103,7 @@ if (NOT DEFINED SUPPORT_MODULE_AI_ADAPTER OR SUPPORT_MODULE_AI_ADAPTER)
     list(APPEND raylib_sources ai_scene.c)
     list(APPEND raylib_sources ai_input.c)
     list(APPEND raylib_sources ai_protocol.c)
+    list(APPEND raylib_sources ai_sprite.c)    # pixel-art sheets + animation playback
 
     # Platform-specific AI input simulation
     if (WIN32)

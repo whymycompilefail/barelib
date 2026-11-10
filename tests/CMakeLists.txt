@@ -21,6 +21,8 @@ endfunction()
 # Test target for AI adapter
 if (SUPPORT_MODULE_AI_ADAPTER)
     add_raylib_test(test_ai_adapter)
+    # Sprite sheets: parsing and playback are pure CPU (no window/GPU needed)
+    add_raylib_test(test_sprite)
 endif()
 
 # Protocol conformance harness for tests/ai_protocol_check.py

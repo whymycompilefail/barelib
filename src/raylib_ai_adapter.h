@@ -151,7 +151,8 @@ typedef enum AIDrawElementType {
     AI_DRAW_LINE_BEZIER,      // DrawLineBezier
     AI_DRAW_TEXT,             // DrawText / DrawTextEx
     AI_DRAW_TEXTURE,          // DrawTexture / DrawTexturePro / DrawTextureEx
-    AI_DRAW_PIXEL             // DrawPixel / DrawPixelV
+    AI_DRAW_PIXEL,            // DrawPixel / DrawPixelV
+    AI_DRAW_SPRITE            // AISpriteDraw (pixel-art sheet frame + animation state)
 } AIDrawElementType;
 
 // A single scene element recorded by the adapter.
@@ -169,7 +170,14 @@ typedef struct AIDrawElement {
     int fontSize;             // Text font size
     Color color;              // Element color/tint
     char text[128];           // Text content (AI_DRAW_TEXT only)
-    char source[256];         // Texture file path (AI_DRAW_TEXTURE only)
+    char source[256];         // Texture file path (AI_DRAW_TEXTURE / AI_DRAW_SPRITE atlas)
+    char tag[32];             // Active animation tag (AI_DRAW_SPRITE only, "" = whole sheet)
+    char sheet[256];          // Sheet JSON path (AI_DRAW_SPRITE only)
+    int frame;                // Current frame source index (AI_DRAW_SPRITE only)
+    int frameCount;           // Frames in the sheet (AI_DRAW_SPRITE only)
+    int loop;                 // Active tag loops: 0/1 (AI_DRAW_SPRITE only)
+    float scale;              // Integer draw scale (AI_DRAW_SPRITE only)
+    bool flipX;               // Frame mirrored horizontally (AI_DRAW_SPRITE only)
 } AIDrawElement;
 
 // Structure for a captured log/error message

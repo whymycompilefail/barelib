@@ -1156,6 +1156,45 @@ static void TestProceduralAudio(void)
     AIClose(adapter);
 }
 
+// Sprite elements carry animation state (tag/frame/loop/scale/flip) so the AI
+// can verify which frame is actually on screen.
+static void TestSpriteSceneElement(void)
+{
+    TEST_SECTION("Sprite Scene Element");
+
+    AIAdapter *adapter = AIInitEx(&mockDeps);
+
+    AIDrawElement sprite = { 0 };
+    sprite.type = AI_DRAW_SPRITE;
+    sprite.x = 120.0f;
+    sprite.y = 80.0f;
+    sprite.w = 128.0f;
+    sprite.h = 128.0f;
+    sprite.scale = 4.0f;
+    sprite.frame = 2;
+    sprite.frameCount = 6;
+    sprite.loop = 1;
+    sprite.flipX = true;
+    sprite.color = (Color){ 255, 255, 255, 255 };
+    snprintf(sprite.source, sizeof(sprite.source), "art/hero.png");
+    snprintf(sprite.sheet, sizeof(sprite.sheet), "art/hero.json");
+    snprintf(sprite.tag, sizeof(sprite.tag), "walk");
+    AIRegisterElement(adapter, &sprite);
+
+    const char *json = AIGetSceneJSON(adapter);
+    TEST("Sprite type serialized", strstr(json, "\"type\": \"sprite\"") != NULL);
+    TEST("Sprite tag serialized", strstr(json, "\"tag\": \"walk\"") != NULL);
+    TEST("Sprite sheet path serialized", strstr(json, "\"sheet\": \"art/hero.json\"") != NULL);
+    TEST("Sprite atlas path serialized", strstr(json, "\"source\": \"art/hero.png\"") != NULL);
+    TEST("Sprite frame serialized", strstr(json, "\"frame\": 2") != NULL);
+    TEST("Sprite frame_count serialized", strstr(json, "\"frame_count\": 6") != NULL);
+    TEST("Sprite loop flag serialized", strstr(json, "\"loop\": true") != NULL);
+    TEST("Sprite flip flag serialized", strstr(json, "\"flip_x\": true") != NULL);
+    TEST("Sprite scale serialized", strstr(json, "\"scale\": 4") != NULL);
+
+    AIClose(adapter);
+}
+
 //----------------------------------------------------------------------------------
 // Main
 //----------------------------------------------------------------------------------
@@ -1189,6 +1228,7 @@ int main(void)
     TestAudioDeviceGuards();
     TestPausedAudioRetention();
     TestProceduralAudio();
+    TestSpriteSceneElement();
 
     printf("\n========================================\n");
     printf("  Results: %d passed, %d failed out of %d\n",

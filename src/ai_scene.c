@@ -33,6 +33,7 @@
 #define AI_HAS_SECTOR    (1 << 5)   // startAngle/endAngle (stored in rotation/sides)
 #define AI_HAS_TEXT      (1 << 6)   // text + fontSize fields
 #define AI_HAS_SOURCE    (1 << 7)   // source field (texture path)
+#define AI_HAS_SPRITE    (1 << 8)   // sprite animation fields (tag/frame/frameCount/loop/scale/flipX)
 
 #define AI_ELEMENT_TYPES(X) \
     X(AI_DRAW_CLEAR,         "clear",         0) \
@@ -50,7 +51,8 @@
     X(AI_DRAW_LINE_BEZIER,   "line_bezier",   AI_HAS_POINTS) \
     X(AI_DRAW_TEXT,          "text",          AI_HAS_TEXT) \
     X(AI_DRAW_TEXTURE,       "texture",       AI_HAS_SIZE|AI_HAS_SOURCE|AI_HAS_ROTATION) \
-    X(AI_DRAW_PIXEL,         "pixel",         0)
+    X(AI_DRAW_PIXEL,         "pixel",         0) \
+    X(AI_DRAW_SPRITE,        "sprite",        AI_HAS_SIZE|AI_HAS_SOURCE|AI_HAS_SPRITE)
 
 // JSON "type" name lookup (generated from the single list above)
 #define AI_GEN_NAME(type, name, flags) name,
@@ -81,6 +83,11 @@ static AIAdapter *AIGetActiveAdapter(void)
     (void)ctx;
     return NULL;
     #endif
+}
+
+AIAdapter *AIGetActiveAdapterInternal(void)
+{
+    return AIGetActiveAdapter();
 }
 
 const char *AILookupTexturePath(AIAdapter *adapter, unsigned int textureId)
@@ -225,7 +232,7 @@ const char *AIGetSceneJSON(AIAdapter *adapter)
         const AIDrawElement *e = &elems[i];
         Color c = e->color;
 
-        if (e->type < AI_DRAW_CLEAR || e->type > AI_DRAW_PIXEL) continue;
+        if (e->type < AI_DRAW_CLEAR || e->type > AI_DRAW_SPRITE) continue;
 
         if (elementsWritten > 0)
         {
@@ -310,6 +317,21 @@ const char *AIGetSceneJSON(AIAdapter *adapter)
                 "    {\"type\": \"%s\", \"x1\": %.1f, \"y1\": %.1f, \"x2\": %.1f, \"y2\": %.1f, \"color\": [%d, %d, %d, %d]}",
                 aiElementTypeNames[e->type], e->x, e->y, e->x2, e->y2, c.r, c.g, c.b, c.a);
             break;
+        case AI_DRAW_SPRITE: {
+            char escapedSource[300];
+            char escapedSheet[300];
+            char escapedTag[80];
+            AIEscapeJSON(e->source, escapedSource, sizeof(escapedSource));
+            AIEscapeJSON(e->sheet, escapedSheet, sizeof(escapedSheet));
+            AIEscapeJSON(e->tag, escapedTag, sizeof(escapedTag));
+            AI_JSON_APPEND(json, remaining, offset,
+                "    {\"type\": \"%s\", \"x\": %.1f, \"y\": %.1f, \"w\": %.1f, \"h\": %.1f, \"scale\": %.0f, \"source\": \"%s\", \"sheet\": \"%s\", \"tag\": \"%s\", \"frame\": %d, \"frame_count\": %d, \"loop\": %s, \"flip_x\": %s, \"tint\": [%d, %d, %d, %d]}",
+                aiElementTypeNames[e->type], e->x, e->y, e->w, e->h, e->scale,
+                escapedSource, escapedSheet, escapedTag, e->frame, e->frameCount,
+                (e->loop != 0) ? "true" : "false", e->flipX ? "true" : "false",
+                c.r, c.g, c.b, c.a);
+            break;
+        }
         case AI_DRAW_LINE_BEZIER:
             AI_JSON_APPEND(json, remaining, offset,
                 "    {\"type\": \"%s\", \"x1\": %.1f, \"y1\": %.1f, \"x2\": %.1f, \"y2\": %.1f, \"color\": [%d, %d, %d, %d]}",
@@ -755,6 +777,12 @@ static bool AIElementChanged(const AIDrawElement *c, const AIDrawElement *s)
     if ((flags & AI_HAS_POINTS) &&
         ((c->x2 != s->x2) || (c->y2 != s->y2) || (c->x3 != s->x3) || (c->y3 != s->y3))) return true;
     if ((flags & AI_HAS_SOURCE) && (strcmp(c->source, s->source) != 0)) return true;
+    if (flags & AI_HAS_SPRITE)
+    {
+        if ((strcmp(c->tag, s->tag) != 0) || (strcmp(c->sheet, s->sheet) != 0)) return true;
+        if ((c->frame != s->frame) || (c->frameCount != s->frameCount)) return true;
+        if ((c->loop != s->loop) || (c->scale != s->scale) || (c->flipX != s->flipX)) return true;
+    }
 
     return false;
 }
