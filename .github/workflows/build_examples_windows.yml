@@ -6,13 +6,13 @@ on:
     paths:
       - 'src/**'
       - 'examples/**'
-      - '.github/workflows/windows_examples.yml'
+      - '.github/workflows/build_examples_windows.yml'
   pull_request:
     branches: [ main, master ]
     paths:
       - 'src/**'
       - 'examples/**'
-      - '.github/workflows/windows_examples.yml'
+      - '.github/workflows/build_examples_windows.yml'
 
 permissions:
   contents: read

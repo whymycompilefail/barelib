@@ -6,16 +6,16 @@ on:
     paths:
       - 'src/**'
       - 'examples/**'
-      - '.github/workflows/cmake.yml'
-      - 'CMakeList.txt'
+      - '.github/workflows/build_cmake.yml'
+      - 'CMakeLists.txt'
       - 'CMakeOptions.txt'
       - 'cmake/**'
   pull_request:
     paths:
       - 'src/**'
       - 'examples/**'
-      - '.github/workflows/cmake.yml'
-      - 'CMakeList.txt'
+      - '.github/workflows/build_cmake.yml'
+      - 'CMakeLists.txt'
       - 'CMakeOptions.txt'
       - 'cmake/**'
 

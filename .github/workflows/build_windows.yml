@@ -6,12 +6,12 @@ on:
     paths:
       - 'src/**'
       - 'examples/**'
-      - '.github/workflows/windows.yml'
+      - '.github/workflows/build_windows.yml'
   pull_request:
     paths:
       - 'src/**'
       - 'examples/**'
-      - '.github/workflows/windows.yml'
+      - '.github/workflows/build_windows.yml'
   release:
     types: [published]
 
