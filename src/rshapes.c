@@ -532,6 +532,91 @@ void DrawRectanglePro(Rectangle rec, Vector2 origin, float rotation, Color color
 #endif
 }
 
+// Draw a gradient-filled rectangle from four corner colours (T8).
+// Shared by DrawRectangleGradientV/H so both keep the same observer semantics:
+// no dedicated AI element type exists, and no AIDrawXXX wrapper is added. Plain
+// calls are invisible to the scene JSON; with AISetAutoSceneCapture() enabled
+// they register one AI_DRAW_RECT using the average of the four corners.
+static void DrawRectangleGradientEx(int posX, int posY, int width, int height,
+                                    Color cTL, Color cTR, Color cBL, Color cBR)
+{
+    AIDrawObserver observer = GetAIDrawObserver();
+    if (observer != NULL)
+    {
+        Color average = {
+            (unsigned char)((cTL.r + cTR.r + cBL.r + cBR.r)/4),
+            (unsigned char)((cTL.g + cTR.g + cBL.g + cBR.g)/4),
+            (unsigned char)((cTL.b + cTR.b + cBL.b + cBR.b)/4),
+            (unsigned char)((cTL.a + cTR.a + cBL.a + cBR.a)/4)
+        };
+        observer(AI_OBS_RECT, (float)posX, (float)posY, (float)width, (float)height, 0.0f, 0.0f, NULL, average);
+    }
+
+    float left = (float)posX;
+    float right = (float)(posX + width);
+    float top = (float)posY;
+    float bottom = (float)(posY + height);
+
+#if SUPPORT_QUADS_DRAW_MODE
+    rlSetTexture(GetShapesTexture().id);
+    Rectangle shapeRect = GetShapesTextureRectangle();
+
+    rlBegin(RL_QUADS);
+
+        rlNormal3f(0.0f, 0.0f, 1.0f);
+
+        rlColor4ub(cTL.r, cTL.g, cTL.b, cTL.a);
+        rlTexCoord2f(shapeRect.x/texShapes.width, shapeRect.y/texShapes.height);
+        rlVertex2f(left, top);
+
+        rlColor4ub(cBL.r, cBL.g, cBL.b, cBL.a);
+        rlTexCoord2f(shapeRect.x/texShapes.width, (shapeRect.y + shapeRect.height)/texShapes.height);
+        rlVertex2f(left, bottom);
+
+        rlColor4ub(cBR.r, cBR.g, cBR.b, cBR.a);
+        rlTexCoord2f((shapeRect.x + shapeRect.width)/texShapes.width, (shapeRect.y + shapeRect.height)/texShapes.height);
+        rlVertex2f(right, bottom);
+
+        rlColor4ub(cTR.r, cTR.g, cTR.b, cTR.a);
+        rlTexCoord2f((shapeRect.x + shapeRect.width)/texShapes.width, shapeRect.y/texShapes.height);
+        rlVertex2f(right, top);
+
+    rlEnd();
+
+    rlSetTexture(0);
+#else
+    rlBegin(RL_TRIANGLES);
+
+        rlColor4ub(cTL.r, cTL.g, cTL.b, cTL.a);
+        rlVertex2f(left, top);
+        rlColor4ub(cBL.r, cBL.g, cBL.b, cBL.a);
+        rlVertex2f(left, bottom);
+        rlColor4ub(cTR.r, cTR.g, cTR.b, cTR.a);
+        rlVertex2f(right, top);
+
+        rlColor4ub(cTR.r, cTR.g, cTR.b, cTR.a);
+        rlVertex2f(right, top);
+        rlColor4ub(cBL.r, cBL.g, cBL.b, cBL.a);
+        rlVertex2f(left, bottom);
+        rlColor4ub(cBR.r, cBR.g, cBR.b, cBR.a);
+        rlVertex2f(right, bottom);
+
+    rlEnd();
+#endif
+}
+
+// Draw a vertical gradient-filled rectangle
+void DrawRectangleGradientV(int posX, int posY, int width, int height, Color top, Color bottom)
+{
+    DrawRectangleGradientEx(posX, posY, width, height, top, top, bottom, bottom);
+}
+
+// Draw a horizontal gradient-filled rectangle
+void DrawRectangleGradientH(int posX, int posY, int width, int height, Color left, Color right)
+{
+    DrawRectangleGradientEx(posX, posY, width, height, left, right, left, right);
+}
+
 // Draw rectangle outline
 // WARNING: All Draw*Lines() functions use RL_LINES for drawing,
 // it implies flushing the current batch and changing draw mode to RL_LINES

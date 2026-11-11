@@ -118,6 +118,14 @@
     #define FONT_ATLAS_CORNER_REC_SIZE    3         // Size of white rectangle drawn on font atlas on font loading
 #endif
 
+#ifndef FONT_EMBEDDED_MAX_SIZE
+    // The embedded font bakes ~24k CJK codepoints in one atlas. Atlas area grows
+    // roughly with size^2: 16px already needs ~4096x4096 (16 MB of 8bpp data),
+    // 32px ~8192x8192 (64 MB). Reject larger sizes instead of allocating a
+    // multi-hundred-MB atlas. Games needing bigger text should scale a 32px bake.
+    #define FONT_EMBEDDED_MAX_SIZE       64
+#endif
+
 //----------------------------------------------------------------------------------
 // Types and Structures Definition
 //----------------------------------------------------------------------------------
@@ -132,6 +140,36 @@ static Font defaultFont = { 0 };
 
 // Text vertical line spacing in pixels (between lines)
 static int textLineSpacing = 2;
+
+// Unicode ranges baked into every embedded font. Single source of truth shared
+// by LoadFontDefault() and the public LoadFontEmbedded(size) API (T3).
+static const struct { int start; int end; } embeddedFontRanges[] = {
+    { 0x20,   0x7E   },  // ASCII printable
+    { 0xA0,   0xFF   },  // Latin-1 Supplement
+    { 0x4E00, 0x9FFF },  // CJK Unified Ideographs
+    { 0xF900, 0xFAFF },  // CJK Compatibility Ideographs
+    { 0xFF00, 0xFFEF },  // Fullwidth forms
+    { 0x3000, 0x303F },  // CJK Symbols and Punctuation
+    { 0x3200, 0x32FF },  // Enclosed CJK
+    { 0x3300, 0x33FF },  // CJK Compatibility
+    { 0x2000, 0x206F },  // General Punctuation
+    { 0x20A0, 0x20CF },  // Currency Symbols
+    { 0x2100, 0x214F },  // Letterlike Symbols
+    { 0x2190, 0x21FF },  // Arrows
+    { 0x2200, 0x22FF },  // Mathematical Operators
+    { 0x2500, 0x257F },  // Box Drawing
+    { 0x2580, 0x259F },  // Block Elements
+    { 0x25A0, 0x25FF },  // Geometric Shapes
+    { 0x2600, 0x26FF },  // Miscellaneous Symbols
+    { 0x2700, 0x27BF },  // Dingbats
+    { 0x31C0, 0x31EF },  // CJK Strokes
+    { 0x2F00, 0x2FDF },  // Kangxi Radicals
+    { 0x3100, 0x312F },  // Bopomofo
+    { 0x3040, 0x309F },  // Hiragana
+    { 0x30A0, 0x30FF },  // Katakana
+    { 0x3130, 0x318F },  // Hangul Compatibility Jamo
+};
+static const int embeddedFontSingleCodepoints[] = { 0x0A, 0x0D, 0x09 }; // Control chars
 
 //----------------------------------------------------------------------------------
 // Other Modules Functions Declaration (required by text)
@@ -154,67 +192,58 @@ extern void UnloadFontDefault(void);
 //----------------------------------------------------------------------------------
 // Module Functions Definition
 //----------------------------------------------------------------------------------
+// Load the bundled CJK font baked at an explicit pixel size (T3).
+// NOTE: Every call bakes a full ~24k-glyph atlas; the engine does NOT cache
+// sizes. Atlas area grows roughly with size^2 (16px ~16 MB, 32px ~64 MB of
+// 8bpp data, plus per-glyph CPU copies). Bake once, reuse, UnloadFont() when done.
+Font LoadFontEmbedded(int fontSize)
+{
+    Font font = { 0 };
+
+    if ((fontSize < 1) || (fontSize > FONT_EMBEDDED_MAX_SIZE))
+    {
+        TRACELOG(LOG_WARNING, "FONT: LoadFontEmbedded(%i) rejected, expected 1..%i", fontSize, FONT_EMBEDDED_MAX_SIZE);
+        return font;
+    }
+
+    const int rangeCount = (int)(sizeof(embeddedFontRanges)/sizeof(embeddedFontRanges[0]));
+    const int singleCount = (int)(sizeof(embeddedFontSingleCodepoints)/sizeof(embeddedFontSingleCodepoints[0]));
+
+    int codepointCount = singleCount;
+    for (int i = 0; i < rangeCount; i++) codepointCount += embeddedFontRanges[i].end - embeddedFontRanges[i].start + 1;
+
+    int *codepoints = (int *)RL_MALLOC(codepointCount*sizeof(int));
+    if (codepoints == NULL)
+    {
+        TRACELOG(LOG_WARNING, "FONT: LoadFontEmbedded(%i) could not allocate codepoint list", fontSize);
+        return font;
+    }
+
+    int idx = 0;
+    for (int i = 0; i < rangeCount; i++)
+        for (int c = embeddedFontRanges[i].start; c <= embeddedFontRanges[i].end; c++)
+            codepoints[idx++] = c;
+
+    for (int i = 0; i < singleCount; i++) codepoints[idx++] = embeddedFontSingleCodepoints[i];
+
+    font = LoadFontFromMemory(".ttf", cjkFontData, CJK_FONT_DATA_SIZE, fontSize, codepoints, codepointCount);
+    RL_FREE(codepoints);
+
+    return font;
+}
+
 // Load raylib default font
 extern void LoadFontDefault(void)
 {
     // Check to see if the font has already been loaded
     if (defaultFont.glyphs != NULL) return;
 
-    // Build codepoint array: ASCII + Latin-1 + CJK + common symbols
-    // Single source of truth for all Unicode ranges
-    static const struct { int start; int end; } fontRanges[] = {
-        { 0x20,   0x7E   },  // ASCII printable
-        { 0xA0,   0xFF   },  // Latin-1 Supplement
-        { 0x4E00, 0x9FFF },  // CJK Unified Ideographs
-        { 0xF900, 0xFAFF },  // CJK Compatibility Ideographs
-        { 0xFF00, 0xFFEF },  // Fullwidth forms
-        { 0x3000, 0x303F },  // CJK Symbols and Punctuation
-        { 0x3200, 0x32FF },  // Enclosed CJK
-        { 0x3300, 0x33FF },  // CJK Compatibility
-        { 0x2000, 0x206F },  // General Punctuation
-        { 0x20A0, 0x20CF },  // Currency Symbols
-        { 0x2100, 0x214F },  // Letterlike Symbols
-        { 0x2190, 0x21FF },  // Arrows
-        { 0x2200, 0x22FF },  // Mathematical Operators
-        { 0x2500, 0x257F },  // Box Drawing
-        { 0x2580, 0x259F },  // Block Elements
-        { 0x25A0, 0x25FF },  // Geometric Shapes
-        { 0x2600, 0x26FF },  // Miscellaneous Symbols
-        { 0x2700, 0x27BF },  // Dingbats
-        { 0x31C0, 0x31EF },  // CJK Strokes
-        { 0x2F00, 0x2FDF },  // Kangxi Radicals
-        { 0x3100, 0x312F },  // Bopomofo
-        { 0x3040, 0x309F },  // Hiragana
-        { 0x30A0, 0x30FF },  // Katakana
-        { 0x3130, 0x318F },  // Hangul Compatibility Jamo
-    };
-    static const int singleCodepoints[] = { 0x0A, 0x0D, 0x09 }; // Control chars
-
-    int codepointCount = 0;
-    for (int i = 0; i < (int)(sizeof(fontRanges)/sizeof(fontRanges[0])); i++)
-        codepointCount += fontRanges[i].end - fontRanges[i].start + 1;
-    codepointCount += (int)(sizeof(singleCodepoints)/sizeof(singleCodepoints[0]));
-
-    int *codepoints = (int *)RL_MALLOC(codepointCount * sizeof(int));
-    int idx = 0;
-
-    for (int i = 0; i < (int)(sizeof(fontRanges)/sizeof(fontRanges[0])); i++)
-        for (int c = fontRanges[i].start; c <= fontRanges[i].end; c++)
-            codepoints[idx++] = c;
-
-    for (int i = 0; i < (int)(sizeof(singleCodepoints)/sizeof(singleCodepoints[0])); i++)
-        codepoints[idx++] = singleCodepoints[i];
-
-    // Load font from embedded memory
-    Font font = LoadFontFromMemory(".ttf", cjkFontData, CJK_FONT_DATA_SIZE, 16, codepoints, codepointCount);
-
-    RL_FREE(codepoints);
-
-    // Assign to default font
-    defaultFont = font;
+    // Keep the historic 16px bake for the default font so existing games are
+    // unchanged; custom sizes are opt-in through LoadFontEmbedded().
+    defaultFont = LoadFontEmbedded(16);
     defaultFont.glyphPadding = 0;
 
-    TRACELOG(LOG_INFO, "FONT: Default font loaded successfully (%i glyphs, CJK embedded font)", defaultFont.glyphCount);
+    TRACELOG(LOG_INFO, "FONT: Default font loaded successfully (%i glyphs, CJK embedded font, 16px)", defaultFont.glyphCount);
 }
 
 // Unload raylib default font
@@ -621,7 +650,15 @@ GlyphInfo *LoadFontData(const unsigned char *fileData, int dataSize, int fontSiz
                         glyphs[k].advanceX = (int)((float)glyphs[k].advanceX*scaleFactor);
 
                         // WARNING: If requested SDF font, sdf-glyph height is definitely bigger than fontSize due to FONT_SDF_CHAR_PADDING
-                        if ((type != FONT_SDF) && (cpHeight > fontSize)) TRACELOG(LOG_WARNING, "FONT: [0x%04x] Glyph height is bigger than requested font size: %i > %i", cp, cpHeight, (int)fontSize);
+                        // A glyph box taller than fontSize is legitimate for CJK punctuation,
+                        // circles, arrows and descenders: it is NOT a failed bake. With a
+                        // ~24k glyph atlas the old unconditional WARNING flooded the log on
+                        // every InitWindow(). Downgrade to DEBUG instead of deleting it.
+                        // NOTE: a ratio threshold was tried and falsified by measurement:
+                        // baking the bundled font at 12/16/32px produced 6 legal glyphs
+                        // above 1.5x (max 1.67x), so no multiplier reliably separates
+                        // "valid but tall" from "anomalous" for this font.
+                        if ((type != FONT_SDF) && (cpHeight > fontSize)) TRACELOG(LOG_DEBUG, "FONT: [0x%04x] Glyph height is bigger than requested font size: %i > %i", cp, cpHeight, (int)fontSize);
 
                         // Load glyph image
                         glyphs[k].image.width = cpWidth;

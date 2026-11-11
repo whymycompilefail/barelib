@@ -888,6 +888,327 @@ static void TestSpriteSheetEndToEnd(void)
     remove("sprite_e2e.json");
 }
 
+//----------------------------------------------------------------------------------
+// Test: Sprite DrawEx (engine fix T4)
+// Anchors, sub-1 scaling, additive flash, and "one draw = one scene element".
+// Readback may flip Y, so anchor checks use x centroids and the *relative*
+// distance between two y centroids rather than absolute screen rows.
+//----------------------------------------------------------------------------------
+
+typedef struct SpritePixels {
+    int count;
+    double sumX;
+    double sumY;
+    double sumLuma;
+} SpritePixels;
+
+static SpritePixels DrawExProbe(AISprite *sprite, float scale, AISpriteAnchor anchor, int fx, Color tint)
+{
+    SpritePixels stats = { 0, 0.0, 0.0, 0.0 };
+
+    RenderTexture2D rt = LoadRenderTexture(128, 128);
+    BeginTextureMode(rt);
+    ClearBackground(BLACK);
+    AISpriteDrawEx(sprite, 64.0f, 64.0f, scale, anchor, false, tint, fx);
+    EndTextureMode();
+
+    Image back = LoadImageFromTexture(rt.texture);
+    if (IsImageValid(back))
+    {
+        for (int y = 0; y < back.height; y++)
+        {
+            for (int x = 0; x < back.width; x++)
+            {
+                Color c = GetImageColor(back, x, y);
+                if ((c.r > 10) || (c.g > 10) || (c.b > 10))
+                {
+                    stats.count++;
+                    stats.sumX += x;
+                    stats.sumY += y;
+                    stats.sumLuma += (c.r + c.g + c.b);
+                }
+            }
+        }
+        UnloadImage(back);
+    }
+    UnloadRenderTexture(rt);
+    return stats;
+}
+
+static void TestSpriteDrawEx(void)
+{
+    TEST_SECTION("Sprite DrawEx (anchors / flash / single element)");
+
+    // 16x16 single-frame DARK atlas: an additive white pass must brighten it
+    Image atlas = GenImageColor(16, 16, (Color){ 40, 20, 20, 255 });
+    TEST("DrawEx atlas exported", ExportImage(atlas, "sprite_fx.png"));
+    UnloadImage(atlas);
+
+    const char *sheet =
+        "{\"image\":\"sprite_fx.png\","
+        "\"frames\":[{\"index\":0,\"source_index\":0,\"x\":0,\"y\":0,\"width\":16,\"height\":16,\"duration_ms\":100}],"
+        "\"canvas\":{\"width\":16,\"height\":16}}";
+    SaveFileText("sprite_fx.json", (char *)sheet);
+
+    AISprite *sprite = AILoadSpriteSheet("sprite_fx.json");
+    TEST("DrawEx sprite loads with texture", sprite != NULL && sprite->texture.id != 0);
+    if (sprite == NULL)
+    {
+        remove("sprite_fx.png");
+        remove("sprite_fx.json");
+        return;
+    }
+
+    // --- Anchors (no adapter yet, so these probes add no scene elements) ---
+    SpritePixels top = DrawExProbe(sprite, 2.0f, AI_SPRITE_TOPLEFT, 0, WHITE);
+    SpritePixels mid = DrawExProbe(sprite, 2.0f, AI_SPRITE_CENTER, 0, WHITE);
+    SpritePixels bot = DrawExProbe(sprite, 2.0f, AI_SPRITE_BOTTOM_CENTER, 0, WHITE);
+
+    TEST("scale=2 renders 32x32 for every anchor",
+         top.count == 1024 && mid.count == 1024 && bot.count == 1024);
+    double cxTop = top.count ? top.sumX/top.count : 0.0;
+    double cxMid = mid.count ? mid.sumX/mid.count : 0.0;
+    double cxBot = bot.count ? bot.sumX/bot.count : 0.0;
+    double cyMid = mid.count ? mid.sumY/mid.count : 0.0;
+    double cyBot = bot.count ? bot.sumY/bot.count : 0.0;
+    TEST("TOPLEFT x centroid is 16px right of CENTER", fabs(cxTop - cxMid - 16.0) < 1.0);
+    TEST("BOTTOM_CENTER keeps CENTER x centroid", fabs(cxBot - cxMid) < 1.0);
+    TEST("BOTTOM_CENTER is 16px away from CENTER in y",
+         fabs(fabs(cyMid - cyBot) - 16.0) < 1.0);
+
+    // --- scale < 1 must actually shrink (the old API clamped it to 1) ---
+    SpritePixels half = DrawExProbe(sprite, 0.5f, AI_SPRITE_TOPLEFT, 0, WHITE);
+    TEST("scale=0.5 renders smaller than 16x16", half.count > 0 && half.count < 256);
+
+    // --- Legacy wrapper keeps its historic clamp ---
+    RenderTexture2D legacyRT = LoadRenderTexture(128, 128);
+    BeginTextureMode(legacyRT);
+    ClearBackground(BLACK);
+    AISpriteDraw(sprite, 64, 64, 0, false, WHITE);   // 0 historically means 1
+    EndTextureMode();
+    Image legacyBack = LoadImageFromTexture(legacyRT.texture);
+    int legacyCount = 0;
+    if (IsImageValid(legacyBack))
+    {
+        for (int y = 0; y < legacyBack.height; y++)
+        {
+            for (int x = 0; x < legacyBack.width; x++)
+            {
+                Color c = GetImageColor(legacyBack, x, y);
+                if ((c.r > 10) || (c.g > 10) || (c.b > 10)) legacyCount++;
+            }
+        }
+        UnloadImage(legacyBack);
+    }
+    UnloadRenderTexture(legacyRT);
+    TEST("legacy AISpriteDraw still clamps scale<1 to 1",
+         legacyCount >= 200 && legacyCount <= 300);
+
+    // --- FLASH: brighten a dark sprite without registering a second element ---
+    AIAdapter *adapter = AIInit();
+    TEST("DrawEx adapter created", adapter != NULL);
+    if (adapter != NULL)
+    {
+        SpritePixels plain = DrawExProbe(sprite, 2.0f, AI_SPRITE_BOTTOM_CENTER, 0, WHITE);
+        SpritePixels flash = DrawExProbe(sprite, 2.0f, AI_SPRITE_BOTTOM_CENTER, AI_SPRITE_FX_FLASH, WHITE);
+        double lumaPlain = plain.count ? plain.sumLuma/plain.count : 0.0;
+        double lumaFlash = flash.count ? flash.sumLuma/flash.count : 0.0;
+        TEST("FLASH keeps the same footprint", flash.count == plain.count);
+        TEST("FLASH significantly brightens dark sprite", lumaFlash > lumaPlain + 100.0);
+
+        SpritePixels add = DrawExProbe(sprite, 2.0f, AI_SPRITE_BOTTOM_CENTER,
+                                       AI_SPRITE_FX_TINT_ADD, (Color){ 60, 60, 60, 255 });
+        double lumaAdd = add.count ? add.sumLuma/add.count : 0.0;
+        TEST("TINT_ADD brightens via additive tint", lumaAdd > lumaPlain + 50.0);
+
+        AISetAutoSceneCapture(adapter, true);   // exercise the observer path too
+        AIClearElements(adapter);
+        RenderTexture2D sceneRT = LoadRenderTexture(64, 64);
+        BeginTextureMode(sceneRT);
+        ClearBackground(BLACK);
+        AISpriteDrawEx(sprite, 32.0f, 32.0f, 2.0f, AI_SPRITE_BOTTOM_CENTER,
+                       false, WHITE, AI_SPRITE_FX_FLASH);
+        EndTextureMode();
+        UnloadRenderTexture(sceneRT);
+
+        const char *json = AIGetSceneJSON(adapter);
+        int sprites = 0;
+        const char *p = json;
+        while ((p = strstr(p, "\"type\": \"sprite\"")) != NULL) { sprites++; p += 1; }
+        TEST("FLASH registers exactly one sprite element", sprites == 1);
+        TEST("FLASH pass adds no stray rect element under auto capture",
+             strstr(json, "\"type\": \"rect\"") == NULL);
+        TEST("DrawEx anchor recorded in scene JSON",
+             strstr(json, "\"anchor\": \"bottom_center\"") != NULL);
+        TEST("DrawEx fx recorded in scene JSON", strstr(json, "\"fx\": [\"flash\"]") != NULL);
+        AISetAutoSceneCapture(adapter, false);
+        AIClose(adapter);
+    }
+
+    AIUnloadSpriteSheet(sprite);
+    remove("sprite_fx.png");
+    remove("sprite_fx.json");
+}
+
+//----------------------------------------------------------------------------------
+// Test: LoadFontEmbedded (engine fix T3)
+// The default font was hard-baked at 16px, so 12/18px HUD text was a blurred
+// rescale and the CJK bake emitted a WARNING for every legal glyph whose
+// raster box is taller than the nominal size. LoadFontEmbedded(size) exposes
+// the same embedded CJK atlas at a requested size; the default path becomes
+// LoadFontEmbedded(16) so existing games are bit-for-bit unchanged.
+//----------------------------------------------------------------------------------
+
+static int t3GlyphHeightWarnings = 0;
+static int t3GlyphHeightDebugs = 0;
+
+static void T3TraceLogCallback(int logLevel, const char *text, va_list args)
+{
+    (void)args;
+    if ((text != NULL) && (strstr(text, "Glyph height is bigger") != NULL))
+    {
+        if (logLevel >= LOG_WARNING) t3GlyphHeightWarnings++;
+        else if (logLevel == LOG_DEBUG) t3GlyphHeightDebugs++;
+    }
+}
+
+static void TestEmbeddedFontSizes(void)
+{
+    TEST_SECTION("LoadFontEmbedded (embedded CJK font sizes)");
+
+    Font def = GetFontDefault();
+    TEST("Default font is still baked at 16px", def.baseSize == 16);
+    TEST("Default font stays valid", IsFontValid(def));
+
+    t3GlyphHeightWarnings = 0;
+    t3GlyphHeightDebugs = 0;
+    SetTraceLogCallback(T3TraceLogCallback);
+
+    const int sizes[3] = { 12, 16, 32 };
+    float widths[3] = { 0.0f, 0.0f, 0.0f };
+    long long atlasAreas[3] = { 0, 0, 0 };
+
+    for (int i = 0; i < 3; i++)
+    {
+        Font f = LoadFontEmbedded(sizes[i]);
+        char label[96];
+        snprintf(label, sizeof(label), "LoadFontEmbedded(%d) returns a valid font", sizes[i]);
+        TEST(label, IsFontValid(f));
+        snprintf(label, sizeof(label), "LoadFontEmbedded(%d) honours requested baseSize", sizes[i]);
+        TEST(label, f.baseSize == sizes[i]);
+        snprintf(label, sizeof(label), "LoadFontEmbedded(%d) bakes the full CJK set", sizes[i]);
+        TEST(label, f.glyphCount > 1000);
+
+        if (IsFontValid(f))
+        {
+            widths[i] = MeasureTextEx(f, "HUD 0123", (float)sizes[i], 1.0f).x;
+            atlasAreas[i] = (long long)f.texture.width*f.texture.height;
+            printf("  INFO: %dpx -> atlas %dx%d (%lld px), text width %.1f\n",
+                   sizes[i], f.texture.width, f.texture.height, atlasAreas[i], widths[i]);
+            UnloadFont(f);   // must not crash and must not unload the default font
+        }
+    }
+
+    // The fix must DOWNGRADE the diagnostics, not delete them: at LOG_DEBUG
+    // a full bake still reports the tall (but legal) glyphs.
+    SetTraceLogLevel(LOG_DEBUG);
+    Font dbg = LoadFontEmbedded(12);
+    TEST("LOG_DEBUG bake still returns a valid font", IsFontValid(dbg));
+    if (IsFontValid(dbg)) UnloadFont(dbg);
+    SetTraceLogCallback(NULL);
+    SetTraceLogLevel(LOG_WARNING);
+    printf("  INFO: glyph-height WARNINGs=%d, DEBUGs=%d\n",
+           t3GlyphHeightWarnings, t3GlyphHeightDebugs);
+
+    TEST("Legal glyph overshoot no longer emits WARNING", t3GlyphHeightWarnings == 0);
+    TEST("Overshoot diagnostics survive at LOG_DEBUG", t3GlyphHeightDebugs > 0);
+    TEST("Text width increases with baked size",
+         (widths[0] > 0.0f) && (widths[0] < widths[1]) && (widths[1] < widths[2]));
+    TEST("32px atlas is at least 2x the area of the 16px atlas", atlasAreas[2] >= atlasAreas[1]*2);
+    TEST("Default font still valid after unloading custom sizes", IsFontValid(GetFontDefault()));
+
+    // Out-of-range sizes are rejected cheaply instead of attempting a multi-GB atlas
+    Font zero = LoadFontEmbedded(0);
+    Font huge = LoadFontEmbedded(4096);
+    TEST("LoadFontEmbedded(0) rejected without crash", !IsFontValid(zero));
+    TEST("LoadFontEmbedded(4096) rejected without crash", !IsFontValid(huge));
+}
+
+//----------------------------------------------------------------------------------
+// Test: Gradient rectangles (engine fix T8)
+// Four-vertex colour interpolation on the QUADS path. Endpoint assertions for
+// the vertical gradient are orientation-independent because
+// LoadImageFromTexture() flips Y on readback.
+//----------------------------------------------------------------------------------
+
+static void TestGradientRectangles(void)
+{
+    TEST_SECTION("Gradient Rectangles (V/H)");
+
+    const Color red = { 255, 0, 0, 255 };
+    const Color blue = { 0, 0, 255, 255 };
+
+    RenderTexture2D rt = LoadRenderTexture(64, 32);
+    TEST("Gradient RT valid", IsRenderTextureValid(rt));
+
+    BeginTextureMode(rt);
+    ClearBackground(BLACK);
+    DrawRectangleGradientV(0, 0, 32, 32, red, blue);
+    DrawRectangleGradientH(32, 0, 32, 32, red, blue);
+    EndTextureMode();
+
+    Image back = LoadImageFromTexture(rt.texture);
+    TEST("Gradient readback valid", IsImageValid(back));
+    if (IsImageValid(back))
+    {
+        Color vA = GetImageColor(back, 8, 1);
+        Color vB = GetImageColor(back, 8, 30);
+        TEST("V gradient reaches both endpoint colours",
+             ((vA.r > 200 && vA.b < 60 && vB.b > 200 && vB.r < 60) ||
+              (vA.b > 200 && vA.r < 60 && vB.r > 200 && vB.b < 60)));
+        Color vMid = GetImageColor(back, 8, 16);
+        TEST("V gradient interpolates at midpoint",
+             vMid.r > 60 && vMid.r < 200 && vMid.b > 60 && vMid.b < 200);
+
+        Color hLeft = GetImageColor(back, 33, 8);
+        Color hRight = GetImageColor(back, 62, 8);
+        TEST("H gradient left endpoint is red", hLeft.r > 200 && hLeft.b < 60);
+        TEST("H gradient right endpoint is blue", hRight.b > 200 && hRight.r < 60);
+        Color hMid = GetImageColor(back, 48, 8);
+        TEST("H gradient interpolates at midpoint",
+             hMid.r > 60 && hMid.r < 200 && hMid.b > 60 && hMid.b < 200);
+        UnloadImage(back);
+    }
+    UnloadRenderTexture(rt);
+
+    // Native DrawXXX primitives are not observed unless auto capture is on.
+    // With it on, a gradient must behave like the rest of the rectangle family:
+    // exactly one rect element, using the average of the two endpoint colours.
+    AIAdapter *adapter = AIInit();
+    TEST("Gradient adapter created", adapter != NULL);
+    if (adapter != NULL)
+    {
+        AISetAutoSceneCapture(adapter, true);
+        AIClearElements(adapter);
+        RenderTexture2D capRT = LoadRenderTexture(32, 32);
+        BeginTextureMode(capRT);
+        ClearBackground(BLACK);
+        DrawRectangleGradientV(0, 0, 32, 32, red, blue);
+        EndTextureMode();
+        UnloadRenderTexture(capRT);
+
+        const char *json = AIGetSceneJSON(adapter);
+        int rects = 0;
+        const char *p = json;
+        while ((p = strstr(p, "\"type\": \"rect\"")) != NULL) { rects++; p += 1; }
+        TEST("Gradient reports exactly one rect under auto capture", rects == 1);
+        TEST("Gradient rect uses the averaged endpoint colour",
+             strstr(json, "\"color\": [127, 0, 127, 255]") != NULL);
+        AISetAutoSceneCapture(adapter, false);
+        AIClose(adapter);
+    }
+}
+
 int main(void)
 {
     SetTraceLogLevel(LOG_WARNING);
@@ -927,6 +1248,9 @@ int main(void)
     TestActiveAdapterWrappers();
     TestM4SlimWrappers();
     TestSpriteSheetEndToEnd();
+    TestSpriteDrawEx();
+    TestEmbeddedFontSizes();
+    TestGradientRectangles();
 
     // Clean up
     CloseWindow();

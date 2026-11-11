@@ -96,6 +96,7 @@ extern "C" {            // Prevents name mangling of functions
 
 // Font loading/unloading functions
 RLAPI Font GetFontDefault(void);                                                            // Get the default Font
+RLAPI Font LoadFontEmbedded(int fontSize);                                                  // Load embedded CJK font baked at fontSize (1..64, larger/lower returns empty Font); each call bakes a full ~24k-glyph atlas (~size^2 memory), cache it yourself and call UnloadFont()
 RLAPI Font LoadFont(const char *fileName);                                                  // Load font from file into GPU memory (VRAM)
 RLAPI Font LoadFontEx(const char *fileName, int fontSize, const int *codepoints, int codepointCount); // Load font from file with defined codepoints and generation size, use NULL for codepoints and 0 for codepointCount to load the default character set, font size is provided in pixels height
 RLAPI Font LoadFontFromImage(Image image, Color key, int firstChar);                        // Load font from Image (XNA style)

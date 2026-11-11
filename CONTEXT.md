@@ -27,16 +27,16 @@
 - **rtextures**：图像加载/保存/处理、纹理上传/绘制
 - **rtext**：字体加载、文本绘制、字符串处理、Codepoint 编码
 - **raudio**：音频设备、Sound/Wave/Music/AudioStream 管理
-- **AI Adapter**：场景元素追踪（AIDrawXXX 包装函数自动注册 + AIRegisterElement 手动注册）、命令循环（stdin 线程读取 → 命令队列 → AIUpdate 处理，支持 version/scene/input/inputmode/pause/resume/step/state/errors/quiet/loud/elements/clear/record/playback/snapshot/diff/help/quit）、协议版本化（AI_PROTOCOL_VERSION + 场景 JSON `protocol` 字段 + version 命令）、结构化错误模型（AIErrorCode 枚举 + `<<AI_ERROR>> [code:N]` 输出 + AIGetLastError 查询最后错误）、容量显式溢出（MAX_AI_ELEMENTS 可配置 + 场景 JSON `overflow` 字段）、录制/回放系统（记录输入动作+帧号，按帧重放）、场景快照与差异比较（AISaveSnapshot/AIGetSnapshotDiff，比较 type/pos/size/radius/color 变化）、游戏循环控制（AIPauseGame/AIResumeGame/AIStepFrame）、输入注入（AIInjectInput，支持 press/click/move/scroll/type）、后端状态查询（AIGetWindowStateJSON/AIGetInputStateJSON/AIGetTimeStateJSON/**AIGetAudioStateJSON 全部经 AIStateSnapshot 纯格式化**——含 audio 设备/缓冲列表，候选 3 完成；快照由 deps->getStateSnapshot 注入，默认实现直读 CORE 与 raudio iterator）、程序化音频生成（AIPlayTone/AIPlayNoise + 5 种波形 + 淡入淡出 + handle 控制）、依赖注入（AIDeps 用于无窗口测试）、像素精灵层（AILoadSpriteSheet 读取 Pixel Loom 原生 / Aseprite hash/array 图集 JSON，PNG 相对 JSON 解析并默认 POINT 过滤，引擎接管 forward/reverse/pingpong 播放与逐帧时长，场景 JSON 输出 AI_DRAW_SPRITE 的 sheet/tag/frame/frame_count/loop/scale/flip_x）、stdout 协议（<<AI_SCENE_BEGIN>>/<<AI_DIFF_BEGIN>> 等标记）
+- **AI Adapter**：场景元素追踪（AIDrawXXX 包装函数自动注册 + AIRegisterElement 手动注册）、命令循环（stdin 线程读取 → 命令队列 → AIUpdate 处理，支持 version/scene/input/inputmode/pause/resume/step/state/errors/quiet/loud/elements/clear/record/playback/snapshot/diff/help/quit）、协议版本化（AI_PROTOCOL_VERSION + 场景 JSON `protocol` 字段 + version 命令）、结构化错误模型（AIErrorCode 枚举 + `<<AI_ERROR>> [code:N]` 输出 + AIGetLastError 查询最后错误）、容量显式溢出（MAX_AI_ELEMENTS 可配置 + 场景 JSON `overflow` 字段）、录制/回放系统（记录输入动作+帧号，按帧重放）、场景快照与差异比较（AISaveSnapshot/AIGetSnapshotDiff，比较 type/pos/size/radius/color 变化）、游戏循环控制（AIPauseGame/AIResumeGame/AIStepFrame）、输入注入（AIInjectInput，支持 press/click/move/scroll/type）、后端状态查询（AIGetWindowStateJSON/AIGetInputStateJSON/AIGetTimeStateJSON/**AIGetAudioStateJSON 全部经 AIStateSnapshot 纯格式化**——含 audio 设备/缓冲列表，候选 3 完成；快照由 deps->getStateSnapshot 注入，默认实现直读 CORE 与 raudio iterator）、程序化音频生成（AIPlayTone/AIPlayNoise + 5 种波形 + 淡入淡出 + handle 控制）、依赖注入（AIDeps 用于无窗口测试）、像素精灵层（AILoadSpriteSheet 读取 Pixel Loom 原生 / Aseprite hash/array 图集 JSON，PNG 相对 JSON 解析并默认 POINT 过滤，引擎接管 forward/reverse/pingpong 播放与逐帧时长，场景 JSON 输出 AI_DRAW_SPRITE 的 sheet/tag/frame/frame_count/loop/scale/flip_x/anchor/fx）、stdout 协议（<<AI_SCENE_BEGIN>>/<<AI_DIFF_BEGIN>> 等标记）
 
-## API 精简状态（当前总计 747 个 RLAPI/RMAPI 函数：引擎 672 + AI 层 75，2026-11 实测）
+## API 精简状态（当前总计 752 个 RLAPI/RMAPI 函数：引擎 675 + AI 层 77，2026-11 实测）
 
 | 模块 | 函数数 | 精简内容 |
 |------|--------|----------|
 | raylib_core.h | 165 | 移除 VR、自动化事件、哈希/编码、自定义帧控制、手势等冷门功能 |
-| raylib_shapes.h | 48 | 移除样条线、渐变变体；候选 6 补回圆角矩形/扇形（DrawRectangleRounded/Lines、DrawCircleSector/Lines） |
+| raylib_shapes.h | 50 | 移除样条线；候选 6 补回圆角矩形/扇形（DrawRectangleRounded/Lines、DrawCircleSector/Lines）；T8 补回 V/H 渐变矩形（四顶点插值，auto capture 下上报单个 rect） |
 | raylib_textures.h | 87 | 移除程序化图像生成、卷积、抖动、CubeMap、NPatch，合并 ImageDraw 变体 |
-| raylib_text.h | 48 | 移除 Alloc 变体、命名转换、冷门字符串操作函数 |
+| raylib_text.h | 49 | 移除 Alloc 变体、命名转换、冷门字符串操作函数；T3 补回 LoadFontEmbedded(size) 按字号烘焙内嵌 CJK 字体 |
 | raylib_audio.h | 53 | 保留核心音频功能 |
 | rlgl.h | 148 | 保留为底层公开 API（供高级用户直接使用） |
 | raymath.h | 120 | 保留 Vector2/3/4/Matrix/Quaternion 类型与常用运算（3D 专用运算精简） |

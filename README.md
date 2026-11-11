@@ -14,6 +14,8 @@ features
   - OpenGL hardware accelerated (1.1, 2.1, 3.3, ES 2.0, ES 3.0)
   - Software renderer backend (no GPU required)
   - 2D shapes, textures, text, and audio
+  - Gradient rectangles (`DrawRectangleGradientV/H`) — four-vertex colour interpolation for skies, fog bands and vignettes
+  - Embedded CJK font baked at a requested size (`LoadFontEmbedded(1..64)`); the default font stays 16px so existing games are unchanged
   - Render textures for offscreen rendering
   - Camera2D with world-to-screen and screen-to-world transforms
   - Input: keyboard, mouse, gamepad, touch

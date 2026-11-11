@@ -301,6 +301,52 @@ All wrappers call the real raylib draw function + register the element. If no ad
 > engine-side primitives they call (including `DrawRectangleRounded` and
 > `DrawCircleSector`, added in the wrapper-deepening pass) are native.
 
+### Engine-side helpers: embedded fonts and gradients
+
+Two native APIs were added in the engine-fixes batch 3. **Neither adds an
+`AIDrawXXX` wrapper nor a new `AI_DRAW_*` element type**: a gradient cannot be
+represented faithfully by a single colour, and duplicating the wrapper table
+would grow the AI surface without improving the scene JSON.
+
+| API | What it does | Scene JSON visibility |
+|-----|--------------|-----------------------|
+| `LoadFontEmbedded(fontSize)` | Bakes the bundled ~24k-glyph CJK font at `fontSize` (1..64; out of range returns an empty `Font`) | not a draw call |
+| `DrawRectangleGradientV/H(...)` | Four-vertex colour interpolation over the shapes texture | plain calls are invisible, exactly like other native `DrawXXX`; with `AISetAutoSceneCapture(true)` they register **one** `rect` element using the average of the four corner colours |
+
+For explicitly registered scenes, use `AIRegisterElement()` with an
+`AI_DRAW_RECT` element if a gradient must appear in the scene JSON.
+
+**Why a size parameter**: `GetFontDefault()` is baked once at 16px, so drawing
+12/18px HUD text rescales that bitmap and looks blurred. Bake a matching font
+and pass it to `DrawTextEx()` / `AIDrawText()` instead:
+
+```c
+Font hud = LoadFontEmbedded(12);
+DrawTextEx(hud, "HP 100", (Vector2){ 10, 10 }, 12, 1, WHITE);
+// ...
+UnloadFont(hud);   // safe: custom bakes own their texture; never unload GetFontDefault()
+```
+
+**Memory cost (measured, `test_gpu` INFO lines)**: each bake is one 8bpp
+power-of-two atlas covering all ~24k codepoints, plus per-glyph CPU image copies.
+
+| size | atlas | 8bpp atlas data | `"HUD 0123"` width |
+|------|-------|-----------------|--------------------|
+| 12px | 4096x4096 | 16 MB | 52 px |
+| 16px | 4096x4096 | 16 MB | 66 px |
+| 32px | 8192x8192 | 64 MB | 129 px |
+
+Sizes snap to power-of-two atlas buckets (12px and 16px share one bucket);
+16px -> 32px is exactly 4x the atlas area. The engine does **not** cache sizes:
+bake once at startup, reuse, unload on shutdown. Sizes above 64 are rejected
+because a full CJK atlas would exceed 256 MB.
+
+`Glyph height is bigger than requested font size` is a legitimate condition for
+CJK punctuation, symbols and descenders, not a failed bake. It is now
+`LOG_DEBUG`. A `>1.5x` warning threshold was tried and **falsified by
+measurement**: baking at 12/16/32px produced 6 legal glyphs above 1.5x (max
+1.67x), so no multiplier reliably separates "valid but tall" from anomalous.
+
 ### Input injection
 
 ```c
