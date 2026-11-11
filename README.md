@@ -39,7 +39,8 @@ features
   - **Procedural audio**: AIPlayTone / AIPlayNoise with 5 waveforms (sine, square, triangle, sawtooth, noise)
   - **Pixel sprites**: `AILoadSpriteSheet()` reads Pixel Loom / Aseprite sheet JSON, owns tag playback
     (forward / reverse / pingpong, per-frame durations) and records the live tag + frame in the scene JSON
-    (`AI_DRAW_SPRITE`); atlases load with nearest filtering and draw at integer scale
+    (`AI_DRAW_SPRITE`); atlases load with nearest filtering; `AISpriteCloneState()` gives each actor an
+    independent clock, `AISpriteDrawEx()` adds anchors, sub-1 scales and additive hit-flash in one element
   - **Backend state query**: window, input, time, audio state as JSON
   - **Dependency injection**: mock AIDeps for testing without a window
   - No network, no external AI runtime — just data your agent can consume

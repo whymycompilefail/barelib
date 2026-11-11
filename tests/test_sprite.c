@@ -210,6 +210,50 @@ static void TestInvalidInput(void)
     CHECK(AISpritePlay(NULL, "walk") == false, "NULL sprite cannot play");
 }
 
+// T4: each on-screen instance needs its own playback clock, but all instances
+// of the same sheet share one atlas texture. A fake texture id lets ownership
+// be checked on the CPU suite (the handle is never passed to UnloadTexture).
+static void TestCloneState(void)
+{
+    printf("Cloned playback state\n");
+
+    AISprite *original = NULL;
+    if (!Parse(NATIVE_JSON, "hero.json", &original)) { CHECK(0, "parse for clone"); return; }
+
+    CHECK(AISpritePlay(original, "walk") == true, "original plays walk");
+    original->texture.id = 4242;
+    original->ownsTexture = true;
+
+    AISprite *clone = AISpriteCloneState(original);
+    CHECK(clone != NULL, "clone created");
+    if (clone == NULL) { original->texture.id = 0; AIUnloadSpriteSheet(original); return; }
+
+    CHECK(clone->texture.id == original->texture.id, "clone shares the atlas texture");
+    CHECK(clone->ownsTexture == false, "clone does not own the texture");
+    CHECK(AISpriteFrameCount(clone) == AISpriteFrameCount(original), "clone keeps frames");
+    CHECK(strcmp(clone->sheetPath, original->sheetPath) == 0, "clone keeps sheet path");
+    CHECK(strcmp(clone->imagePath, original->imagePath) == 0, "clone keeps atlas path");
+    CHECK(AISpriteCurrentFrame(clone) == AISpriteCurrentFrame(original), "clone starts on the same frame");
+
+    // Frame 0 holds 100ms, frame 1 holds 200ms. Advance ONLY the clone.
+    AISpriteUpdate(clone, 0.12f);
+    CHECK(AISpriteCurrentFrame(clone) == 1, "clone advances to frame 1");
+    CHECK(AISpriteCurrentFrame(original) == 0, "clone update does not move the original");
+    AISpriteUpdate(clone, 0.20f);
+    CHECK(AISpriteCurrentFrame(clone) == 2, "clone advances to frame 2");
+
+    // Now advance ONLY the original; the clone must stay where it is.
+    AISpriteUpdate(original, 0.12f);
+    CHECK(AISpriteCurrentFrame(original) == 1, "original advances to frame 1");
+    CHECK(AISpriteCurrentFrame(clone) == 2, "original update does not move the clone");
+
+    AIUnloadSpriteSheet(clone);
+    CHECK(original->texture.id == 4242, "unloading a clone keeps the original texture alive");
+
+    original->texture.id = 0;   // do not hand the fake handle to UnloadTexture
+    AIUnloadSpriteSheet(original);
+}
+
 int main(void)
 {
     printf("=== test_sprite ===\n");
@@ -219,6 +263,7 @@ int main(void)
     TestReverseAndPingpong();
     TestAseprite();
     TestInvalidInput();
+    TestCloneState();
 
     printf("%d checks, %d failures\n", checks, failures);
     if (failures == 0) printf("ALL TESTS PASSED\n");

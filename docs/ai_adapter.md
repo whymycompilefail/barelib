@@ -407,16 +407,49 @@ the frame that is actually on screen.
 AISprite *hero = AILoadSpriteSheet("assets/hero.json");  // atlas PNG resolved next to the JSON
 AISpritePlay(hero, "walk");                              // tags from the sheet; NULL = whole timeline
 
-// game loop
+// One instance per actor: independent clock, shared atlas texture
+AISprite *orc = AISpriteCloneState(hero);
+AISpritePlay(orc, "walk");
+AISpriteSeek(orc, 2);                                     // desynchronise the squad
+
+// game loop (per actor)
 AISpriteUpdate(hero, GetFrameTime());
-AISpriteDraw(hero, 120, 80, 4, false, WHITE);            // integer scale 4x, no flip
+AISpriteUpdate(orc, GetFrameTime());
+
+// (x, y) is the FEET; no more hand-computed y + h - canvasHeight*scale
+AISpriteDrawEx(hero, 120, 200, 2.0f, AI_SPRITE_BOTTOM_CENTER, false, WHITE, 0);
+// hit flash: one extra additive pass, still exactly ONE scene element
+AISpriteDrawEx(orc, 300, 200, 2.0f, AI_SPRITE_BOTTOM_CENTER, true, WHITE, AI_SPRITE_FX_FLASH);
 ```
+
+`AISpriteDrawEx()` anchors are `AI_SPRITE_TOPLEFT` (legacy), `AI_SPRITE_CENTER` and
+`AI_SPRITE_BOTTOM_CENTER`. `scale` is a float and may be `< 1` (clamped to 0.01); POINT filtering
+is kept, no mipmaps. `fx` is a bitmask: `AI_SPRITE_FX_FLASH` adds a **solid white rectangle** over
+the frame whose alpha follows `tint.a`, and `AI_SPRITE_FX_TINT_ADD` uses `tint` as a solid additive
+amount instead of a multiplicative tint. The solid pass is necessary because `DrawTexturePro`
+multiplies the tint into the texels — a white tint cannot brighten a dark sprite, and re-drawing
+the atlas additively only doubles its darkness. Either effect registers **one** `AI_DRAW_SPRITE`
+element, so the hand-written overlay patch no longer pollutes the scene JSON.
+
+Effects are **rectangle-level**, not alpha-shaped: a silhouette-preserving flash needs a white
+mask atlas, which is out of scope for this fix.
+
+Sprite elements in the scene JSON carry `"anchor": "bottom_center"` and `"fx": ["flash"]` (empty
+`[]` when no effect), plus `"scale"` with two decimals so sub-1 scales survive. `x`/`y` are the
+anchor point (not the rect corner), `w`/`h` the scaled dest size. Both new fields participate in
+snapshot diff (`AIGetSnapshotDiff`).
+
+`AISpriteCloneState()` copies the whole `AISprite` value (about 10 KB per instance), so use it for
+on-screen actors rather than thousands of particles. A clone does **not** own the atlas:
+`AIUnloadSpriteSheet(clone)` frees only that instance, leaving the original and sibling clones
+drawable.
 
 | Function | Description |
 |----------|-------------|
 | `AILoadSpriteSheet(jsonPath)` | Parse sheet JSON, load atlas with `TEXTURE_FILTER_POINT` |
 | `AIParseSpriteSheet(json, size, hint)` | Parse from memory without a texture (headless tests) |
-| `AIUnloadSpriteSheet(sprite)` | Unload texture and free |
+| `AIUnloadSpriteSheet(sprite)` | Unload the texture only when owned, then free |
+| `AISpriteCloneState(src)` | Clone playback state, share the atlas texture |
 | `AISpritePlay(sprite, tag)` | Play a tag from its first frame; unknown tag returns false |
 | `AISpriteStop(sprite)` | Pause on the current frame |
 | `AISpriteUpdate(sprite, dt)` | Advance by `duration_ms`, honouring the tag direction |
@@ -424,12 +457,13 @@ AISpriteDraw(hero, 120, 80, 4, false, WHITE);            // integer scale 4x, no
 | `AISpriteCurrentFrame(sprite)` | Original timeline frame index, or -1 |
 | `AISpriteFrameCount(sprite)` | Frames in the sheet |
 | `AISpriteSeek(sprite, position)` | Jump to a step of the expanded playback order |
-| `AISpriteDraw(sprite, x, y, scale, flipX, tint)` | Draw the current frame and record an `AI_DRAW_SPRITE` element |
+| `AISpriteDrawEx(sprite, x, y, scale, anchor, flipX, tint, fx)` | Draw with anchor / float scale / additive fx; register one element |
+| `AISpriteDraw(sprite, x, y, scale, flipX, tint)` | Legacy wrapper: integer scale (`<1` clamped to 1), top-left, no fx |
 
 Playback order follows Pixel Loom: `forward` = start..end, `reverse` = end..start,
 `pingpong` = start..end then end-1..start+1. Native tags loop by default; an Aseprite tag with a
-`repeat` field plays once and stops on its last frame. `scale` is an integer multiplier
-(nearest filtering + integer scale keep pixel art crisp).
+`repeat` field plays once and stops on its last frame. Integer scales with nearest filtering still
+keep pixel art crispest; use sub-1 scales only for deliberate shrink effects.
 
 ### Command loop
 

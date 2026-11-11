@@ -9,12 +9,14 @@
 **********************************************************************************************/
 
 #include "raylib_ai_adapter.h"
+#include "raylib_ai_sprite.h"  // Required for: AISpriteAnchor / AI_SPRITE_FX_* (sprite scene fields)
 #include "raylib_ai_input.h"   // Required for: AISimulateMode
 #include "raylib_observability.h"   // Required for: SetAIDrawObserver/GetAIDrawObserver (ownership tests)
 #include "ai_adapter_internal.h"    // Required for: GenerateWaveData/AIAllocSlot pure-function tests
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <stdarg.h>
 #include <time.h>
 
 // Element buffer cap must match raylib_ai_adapter.c default; override both via
@@ -1175,6 +1177,8 @@ static void TestSpriteSceneElement(void)
     sprite.frameCount = 6;
     sprite.loop = 1;
     sprite.flipX = true;
+    sprite.anchor = AI_SPRITE_BOTTOM_CENTER;
+    sprite.fx = AI_SPRITE_FX_FLASH;
     sprite.color = (Color){ 255, 255, 255, 255 };
     snprintf(sprite.source, sizeof(sprite.source), "art/hero.png");
     snprintf(sprite.sheet, sizeof(sprite.sheet), "art/hero.json");
@@ -1191,6 +1195,25 @@ static void TestSpriteSceneElement(void)
     TEST("Sprite loop flag serialized", strstr(json, "\"loop\": true") != NULL);
     TEST("Sprite flip flag serialized", strstr(json, "\"flip_x\": true") != NULL);
     TEST("Sprite scale serialized", strstr(json, "\"scale\": 4") != NULL);
+    TEST("Sprite anchor serialized", strstr(json, "\"anchor\": \"bottom_center\"") != NULL);
+    TEST("Sprite fx serialized", strstr(json, "\"fx\": [\"flash\"]") != NULL);
+
+    // T4: anchor/fx are semantic fields — snapshot diff must notice changes
+    AISaveSnapshot(adapter);
+    AIDrawElement variant = sprite;
+
+    variant.fx = 0;
+    AIClearElements(adapter);
+    AIRegisterElement(adapter, &variant);
+    TEST("Sprite fx change detected by snapshot diff",
+         strstr(AIGetSnapshotDiff(adapter), "\"changed\": 1") != NULL);
+
+    variant = sprite;
+    variant.anchor = AI_SPRITE_CENTER;
+    AIClearElements(adapter);
+    AIRegisterElement(adapter, &variant);
+    TEST("Sprite anchor change detected by snapshot diff",
+         strstr(AIGetSnapshotDiff(adapter), "\"changed\": 1") != NULL);
 
     AIClose(adapter);
 }

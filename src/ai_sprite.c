@@ -551,6 +551,7 @@ AISprite *AILoadSpriteSheet(const char *jsonPath)
 
     SetTextureFilter(texture, TEXTURE_FILTER_POINT);
     sprite->texture = texture;
+    sprite->ownsTexture = true;      // only the loader owns the GPU texture
 
     return sprite;
 }
@@ -559,8 +560,26 @@ void AIUnloadSpriteSheet(AISprite *sprite)
 {
     if (sprite == NULL) return;
 
-    if (sprite->texture.id != 0) UnloadTexture(sprite->texture);
+    // Clones and memory-only parses do not own the atlas: unloading one must
+    // not invalidate the original or any sibling instance.
+    if (sprite->ownsTexture && (sprite->texture.id != 0)) UnloadTexture(sprite->texture);
     RL_FREE(sprite);
+}
+
+AISprite *AISpriteCloneState(const AISprite *src)
+{
+    if (src == NULL) return NULL;
+
+    // Full value copy: frames/tags/canvas/paths/order plus the current playback
+    // position are per-instance state; the texture handle is shared. NOTE: this
+    // is sizeof(AISprite) bytes per clone, so clones are for on-screen actors,
+    // not for thousands of particles.
+    AISprite *copy = (AISprite *)RL_MALLOC(sizeof(AISprite));
+    if (copy == NULL) return NULL;
+
+    *copy = *src;
+    copy->ownsTexture = false;
+    return copy;
 }
 
 //----------------------------------------------------------------------------------
@@ -673,11 +692,12 @@ void AISpriteSeek(AISprite *sprite, int position)
 //----------------------------------------------------------------------------------
 // Drawing + AI observation
 //----------------------------------------------------------------------------------
-void AISpriteDraw(AISprite *sprite, float x, float y, int scale, bool flipX, Color tint)
+void AISpriteDrawEx(AISprite *sprite, float x, float y, float scale,
+                    AISpriteAnchor anchor, bool flipX, Color tint, int fx)
 {
     if ((sprite == NULL) || (sprite->frameCount == 0)) return;
     if (sprite->orderCount == 0) AISpriteBuildOrder(sprite, 0, sprite->frameCount - 1, AI_SPRITE_FORWARD);
-    if (scale < 1) scale = 1;
+    if (scale < 0.01f) scale = 0.01f;   // sub-1 scales are allowed; guard against 0/negative dest
 
     const AISpriteFrame *frame = &sprite->frames[sprite->order[sprite->orderPos]];
 
@@ -688,12 +708,48 @@ void AISpriteDraw(AISprite *sprite, float x, float y, int scale, bool flipX, Col
         source.width = -source.width;
     }
 
-    float destWidth = frame->source.width*(float)scale;
-    float destHeight = frame->source.height*(float)scale;
+    float destWidth = frame->source.width*scale;
+    float destHeight = frame->source.height*scale;
+
+    // Convert the requested anchor point to the top-left corner of the dest rect
+    float drawX = x;
+    float drawY = y;
+    if ((anchor == AI_SPRITE_CENTER) || (anchor == AI_SPRITE_BOTTOM_CENTER)) drawX -= destWidth*0.5f;
+    if (anchor == AI_SPRITE_CENTER) drawY -= destHeight*0.5f;
+    else if (anchor == AI_SPRITE_BOTTOM_CENTER) drawY -= destHeight;
+
+    bool tintAdd = ((fx & AI_SPRITE_FX_TINT_ADD) != 0);
+    bool additive = ((fx & (AI_SPRITE_FX_FLASH | AI_SPRITE_FX_TINT_ADD)) != 0);
 
     if (sprite->texture.id != 0)
     {
-        DrawTexturePro(sprite->texture, source, (Rectangle){ x, y, destWidth, destHeight }, (Vector2){ 0.0f, 0.0f }, 0.0f, tint);
+        Rectangle dest = { drawX, drawY, destWidth, destHeight };
+
+        // TINT_ADD keeps the atlas unmodulated so tint acts purely as an additive amount
+        Color baseTint = tintAdd ? WHITE : tint;
+        DrawTexturePro(sprite->texture, source, dest, (Vector2){ 0.0f, 0.0f }, 0.0f, baseTint);
+
+        if (additive)
+        {
+            // Re-drawing the atlas additively does NOT flash a dark sprite:
+            // DrawTexturePro multiplies the tint into the (dark) texels, so an
+            // additive second pass merely doubles that darkness. The review game
+            // worked around it with an additive SOLID pass over the frame rect
+            // (game/src/render.c); this fx internalises exactly that patch, but
+            // still registers only one scene element.
+            // NOTE: this is a rectangle-level flash. An alpha-shaped flash would
+            // require a white mask atlas, which is out of scope for this fix.
+            Color addColor = tintAdd ? tint : (Color){ 255, 255, 255, tint.a };
+            // Stretch raylib's 1x1 white texel over the dest rect. Unlike
+            // DrawRectangleRec(), DrawTexturePro() has no observability hook,
+            // so this pass cannot leak a stray rect element when the host has
+            // enabled automatic scene capture.
+            Texture2D white = GetShapesTexture();
+            Rectangle whiteSrc = GetShapesTextureRectangle();
+            BeginBlendMode(BLEND_ADDITIVE);
+            DrawTexturePro(white, whiteSrc, dest, (Vector2){ 0.0f, 0.0f }, 0.0f, addColor);
+            EndBlendMode();
+        }
     }
 
     AIAdapter *adapter = AIGetActiveAdapterInternal();
@@ -701,13 +757,15 @@ void AISpriteDraw(AISprite *sprite, float x, float y, int scale, bool flipX, Col
 
     AIDrawElement element = { 0 };
     element.type = AI_DRAW_SPRITE;
-    element.x = x;
+    element.x = x;                  // the anchor point, interpreted via element.anchor
     element.y = y;
     element.w = destWidth;
     element.h = destHeight;
     element.color = tint;
-    element.scale = (float)scale;
+    element.scale = scale;
     element.flipX = flipX;
+    element.anchor = (int)anchor;
+    element.fx = fx;
     element.frame = frame->sourceIndex;
     element.frameCount = sprite->frameCount;
     element.loop = sprite->loop ? 1 : 0;
@@ -719,4 +777,12 @@ void AISpriteDraw(AISprite *sprite, float x, float y, int scale, bool flipX, Col
     }
 
     AIAddElement(adapter, &element);
+}
+
+void AISpriteDraw(AISprite *sprite, float x, float y, int scale, bool flipX, Color tint)
+{
+    // Source compatibility: the legacy integer-scale clamp is kept here, not
+    // inside DrawEx (which deliberately supports scales below 1).
+    if (scale < 1) scale = 1;
+    AISpriteDrawEx(sprite, x, y, (float)scale, AI_SPRITE_TOPLEFT, flipX, tint, AI_SPRITE_FX_NONE);
 }

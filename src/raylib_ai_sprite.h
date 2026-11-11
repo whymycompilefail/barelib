@@ -31,6 +31,11 @@ extern "C" {
 #define AI_SPRITE_TAG_NAME_LEN  32      // Animation tag name buffer (UTF-8 bytes)
 #define AI_SPRITE_PATH_LEN      256     // Sheet/atlas path buffer
 
+// Additive draw effects for AISpriteDrawEx(); bits may be combined.
+#define AI_SPRITE_FX_NONE       0
+#define AI_SPRITE_FX_FLASH      (1 << 0)   // additive solid white rect over the frame (alpha follows tint.a)
+#define AI_SPRITE_FX_TINT_ADD   (1 << 1)   // additive solid tint instead of a multiplicative tint
+
 //----------------------------------------------------------------------------------
 // Types and Structures Definition
 //----------------------------------------------------------------------------------
@@ -40,6 +45,13 @@ typedef enum AISpriteDirection {
     AI_SPRITE_REVERSE,          // end -> start
     AI_SPRITE_PINGPONG          // start -> end -> start (endpoints not repeated)
 } AISpriteDirection;
+
+// Which point of the frame (x, y) refers to in AISpriteDrawEx().
+typedef enum AISpriteAnchor {
+    AI_SPRITE_TOPLEFT = 0,      // (x, y) is the top-left corner (legacy AISpriteDraw behaviour)
+    AI_SPRITE_CENTER,           // (x, y) is the frame center
+    AI_SPRITE_BOTTOM_CENTER     // (x, y) is the bottom-center ("feet"), handy for platformers
+} AISpriteAnchor;
 
 // One frame of the atlas: a source rectangle plus its hold duration.
 typedef struct AISpriteFrame {
@@ -77,6 +89,7 @@ typedef struct AISprite {
     float elapsedMs;                            // Time spent on the current frame
     bool playing;
     bool finished;                              // Non-looping sequence reached its last frame
+    bool ownsTexture;                           // True only for AILoadSpriteSheet(); clones share the atlas
 } AISprite;
 
 //----------------------------------------------------------------------------------
@@ -118,8 +131,27 @@ RLAPI int AISpriteFrameCount(const AISprite *sprite);
 // Jump to a position inside the expanded playback order (0 = first step).
 RLAPI void AISpriteSeek(AISprite *sprite, int position);
 
-// Draw the current frame at integer scale and record an AI_DRAW_SPRITE element.
-// flipX mirrors the frame horizontally. scale < 1 is treated as 1.
+// Clone an instance: shares the atlas texture but owns an INDEPENDENT playback
+// clock (frames/tags/canvas/paths/order/elapsed are copied, then diverge).
+// Use this for a squad of identical enemies that must not step in lockstep.
+// The clone does not own the texture: AIUnloadSpriteSheet(clone) frees only the
+// instance, leaving the original and every other clone drawable.
+// Returns NULL on allocation failure.
+RLAPI AISprite *AISpriteCloneState(const AISprite *src);
+
+// Draw the current frame with an explicit anchor, float scale and additive fx.
+// scale may be < 1 (clamped to 0.01); POINT filtering is kept, no mipmaps.
+// AI_SPRITE_FX_FLASH adds a solid white rect over the frame (alpha from tint.a)
+// — a white TINT cannot brighten dark texels because tint multiplies. TINT_ADD
+// uses tint as a solid additive amount instead. Effects are rectangle-level
+// (no alpha mask); only ONE AI_DRAW_SPRITE element is registered, and x/y are
+// the anchor point.
+RLAPI void AISpriteDrawEx(AISprite *sprite, float x, float y, float scale,
+                          AISpriteAnchor anchor, bool flipX, Color tint, int fx);
+
+// Legacy wrapper: integer scale (< 1 clamped to 1), top-left anchor, no fx.
+// Records exactly one AI_DRAW_SPRITE element. Kept for source compatibility —
+// use AISpriteDrawEx() for anchors, sub-1 scales and additive effects.
 RLAPI void AISpriteDraw(AISprite *sprite, float x, float y, int scale, bool flipX, Color tint);
 
 #if defined(__cplusplus)

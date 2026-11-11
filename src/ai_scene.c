@@ -12,6 +12,7 @@
 
 #include "ai_adapter_internal.h"
 #include "raylib.h"          // Required for: draw functions, Font, Texture2D
+#include "raylib_ai_sprite.h" // Required for: AISpriteAnchor / AI_SPRITE_FX_* names
 #include "raylib_context.h"  // Required for: RaylibContext, GetRaylibContext()
 #include "config.h"
 
@@ -321,14 +322,29 @@ const char *AIGetSceneJSON(AIAdapter *adapter)
             char escapedSource[300];
             char escapedSheet[300];
             char escapedTag[80];
+            char fxList[64] = "[]";
             AIEscapeJSON(e->source, escapedSource, sizeof(escapedSource));
             AIEscapeJSON(e->sheet, escapedSheet, sizeof(escapedSheet));
             AIEscapeJSON(e->tag, escapedTag, sizeof(escapedTag));
+
+            const char *anchorName = (e->anchor == AI_SPRITE_CENTER) ? "center" :
+                                     (e->anchor == AI_SPRITE_BOTTOM_CENTER) ? "bottom_center" : "top_left";
+            if ((e->fx & (AI_SPRITE_FX_FLASH | AI_SPRITE_FX_TINT_ADD)) != 0)
+            {
+                bool hasFlash = (e->fx & AI_SPRITE_FX_FLASH) != 0;
+                bool hasTintAdd = (e->fx & AI_SPRITE_FX_TINT_ADD) != 0;
+                snprintf(fxList, sizeof(fxList), "[%s%s%s]",
+                         hasFlash ? "\"flash\"" : "",
+                         (hasFlash && hasTintAdd) ? "," : "",
+                         hasTintAdd ? "\"tint_add\"" : "");
+            }
+
             AI_JSON_APPEND(json, remaining, offset,
-                "    {\"type\": \"%s\", \"x\": %.1f, \"y\": %.1f, \"w\": %.1f, \"h\": %.1f, \"scale\": %.0f, \"source\": \"%s\", \"sheet\": \"%s\", \"tag\": \"%s\", \"frame\": %d, \"frame_count\": %d, \"loop\": %s, \"flip_x\": %s, \"tint\": [%d, %d, %d, %d]}",
+                "    {\"type\": \"%s\", \"x\": %.1f, \"y\": %.1f, \"w\": %.1f, \"h\": %.1f, \"scale\": %.2f, \"source\": \"%s\", \"sheet\": \"%s\", \"tag\": \"%s\", \"frame\": %d, \"frame_count\": %d, \"loop\": %s, \"flip_x\": %s, \"anchor\": \"%s\", \"fx\": %s, \"tint\": [%d, %d, %d, %d]}",
                 aiElementTypeNames[e->type], e->x, e->y, e->w, e->h, e->scale,
                 escapedSource, escapedSheet, escapedTag, e->frame, e->frameCount,
                 (e->loop != 0) ? "true" : "false", e->flipX ? "true" : "false",
+                anchorName, fxList,
                 c.r, c.g, c.b, c.a);
             break;
         }
@@ -782,6 +798,7 @@ static bool AIElementChanged(const AIDrawElement *c, const AIDrawElement *s)
         if ((strcmp(c->tag, s->tag) != 0) || (strcmp(c->sheet, s->sheet) != 0)) return true;
         if ((c->frame != s->frame) || (c->frameCount != s->frameCount)) return true;
         if ((c->loop != s->loop) || (c->scale != s->scale) || (c->flipX != s->flipX)) return true;
+        if ((c->anchor != s->anchor) || (c->fx != s->fx)) return true;
     }
 
     return false;
