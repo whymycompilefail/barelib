@@ -178,14 +178,18 @@ cd build && ctest -C Debug
 
 The test suite includes:
 
-- **Unit tests** (no window/GPU needed): AI adapter (123 assertions: protocol
-  version, element overflow, input error feedback, scene JSON truncation safety,
-  record/playback, state snapshot JSON, observer ownership), raymath, rtext,
-  rtextures, raudio, rcore, rshapes — run headless.
-- **GPU tests** (hidden window): `test_gpu`, plus `ai_protocol_scenario` — an
-  end-to-end protocol conformance regression that drives the live game over
-  stdin/stdout pipes (8 steps: version, scene JSON, error codes, help, quit).
-  Both carry the `gpu` label; run them with `ctest -L gpu`.
+- **Unit tests** (no window/GPU needed): AI adapter (protocol version, element
+  overflow and structured error visibility, input error feedback, scene JSON
+  truncation safety, record/playback, state snapshot JSON, observer ownership,
+  100-cycle adapter lifecycle stress), raymath, rtext, rtextures, raudio, rcore,
+  rshapes — run headless.
+- **GPU tests** (hidden window): `test_gpu`; `ai_protocol_scenario` — end-to-end
+  protocol conformance over stdin/stdout pipes (8 steps: version, scene JSON,
+  error codes, help, quit); and `ai_close_lifecycle` — T6 regression that sends
+  `quit` over an **open** stdin pipe, so `AIClose()` must cancel the blocked
+  reader thread instead of detaching it and deferring the free. All three carry
+  the `gpu` label; run them with `ctest -L gpu`. `ctest -LE gpu` runs the 12
+  headless targets used by CI.
 
 Protocol regression tooling (requires a GUI/GPU desktop):
 

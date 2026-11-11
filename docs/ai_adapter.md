@@ -252,6 +252,16 @@ The diff JSON reports:
 | `AIUpdate(adapter)` | Every frame, **after** `EndDrawing()` |
 | `AIClose(adapter)` | Cleanup, **before** `CloseWindow()` |
 
+**`AIClose()` and the stdin reader (Windows)**: `AIStartCommandLoop()` spawns a
+thread blocked in `fgets()`. On close, `CancelSynchronousIo()` cancels that
+pending `ReadFile` for pipe/redirected stdin, so the thread exits and the
+adapter is freed normally. Interactive console input is not always cancellable:
+there the thread is detached, the adapter memory is reclaimed by the OS at
+process exit, and a WARNING is logged. If you need a full release under an
+interactive console, close stdin (EOF) before `AIClose()`. Regression coverage:
+`tests/ai_close_check.py` keeps the pipe open while sending `quit`, which is the
+case that used to defer.
+
 ### Output modes
 
 ```c
@@ -417,7 +427,22 @@ while (!WindowShouldClose())
 |----------|-------------|
 | `AIGetLogs(adapter, &count)` | Get cached log entries (pointer to internal array) |
 | `AIClearLogs(adapter)` | Clear log buffer |
-| `AIGetErrorsJSON(adapter)` | Get recent warnings/errors as JSON |
+| `AIGetErrorsJSON(adapter)` | Get recent warnings/errors as JSON (log ring **plus** the last structured error) |
+
+`errors` returns the captured TraceLog entries at `LOG_WARNING` or above. When
+`AIGetLastError()` is not `AI_ERR_NONE`, the array's **first** entry is a
+structured error object instead:
+
+```json
+{"level": 4, "code": 3, "error": "AI_ERR_BUFFER_FULL", "message": "scene element buffer full (1024)", "time": 0.000}
+```
+
+Before the T7 fix these were two independent channels: `AI_SET_ERROR` wrote
+`lastErrorCode`, but `errors` only read the log ring, so a scene buffer overflow
+showed up in `scene.overflow`, in `AIGetLastError()` and in
+`<<AI_ERROR>> [code:3]`, yet never in `errors`. The structured entry uses
+`LOG_WARNING`, not `LOG_ERROR`, so it does not trigger the `<<AI_CRASH>>` marker
+at shutdown: a dropped scene element is a diagnostic, not a crash.
 
 ### Backend state query
 

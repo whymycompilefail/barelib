@@ -226,24 +226,54 @@ void AIClose(AIAdapter *adapter)
     if (adapter->commandLoopStarted)
     {
         adapter->commandThreadRunning = false;
-        // Signal stdin to unblock fgets: close the thread (it will exit when
-        // stdin is closed or the process exits). We can't safely force-close
-        // a blocked fgets, so we just wait with a short timeout
+
         if (adapter->commandThread != NULL)
         {
-            // Wait briefly for the stdin reader thread to exit (stdin EOF, or
-            // its next loop check of commandThreadRunning). If it is still
-            // blocked in fgets, do NOT free the adapter or delete the mutex:
-            // the thread still references them (use-after-free). Detach the
-            // thread instead and let the OS reclaim everything at process exit
-            DWORD waitRes = WaitForSingleObject(adapter->commandThread, 500);
+            HANDLE thread = adapter->commandThread;
+
+            // T6: cancel the synchronous ReadFile behind a blocked fgets().
+            // CancelSynchronousIo() is Vista+ and lives in kernel32; resolve it
+            // at runtime so we never add a hard SDK/loader dependency. For a
+            // pipe-backed stdin (AI testers, `echo quit |`) this makes fgets()
+            // return NULL so the reader exits and the adapter can be freed.
+            // Console input is not always cancellable -> keep the detach path.
+            typedef BOOL (WINAPI *CancelSynchronousIoFn)(HANDLE);
+            CancelSynchronousIoFn cancelSyncIo = NULL;
+            HMODULE kernel32 = GetModuleHandleW(L"kernel32.dll");
+            if (kernel32 != NULL)
+            {
+                cancelSyncIo = (CancelSynchronousIoFn)GetProcAddress(kernel32, "CancelSynchronousIo");
+            }
+
+            // A thread that passed the while() check but has not entered
+            // ReadFile yet reports ERROR_NOT_FOUND; retry briefly to close that
+            // race before falling back.
+            BOOL cancelled = FALSE;
+            for (int attempt = 0; (attempt < 3) && (cancelSyncIo != NULL) && !cancelled; attempt++)
+            {
+                cancelled = cancelSyncIo(thread);
+                if (!cancelled) Sleep(5);
+            }
+
+            DWORD waitRes = WaitForSingleObject(thread, 500);
             if (waitRes == WAIT_OBJECT_0)
             {
-                CloseHandle(adapter->commandThread);
+                CloseHandle(thread);
                 adapter->commandThread = NULL;
+                if (cancelled)
+                {
+                    // A cancelled ReadFile leaves the CRT stream in an error
+                    // state; clear it so a later AIStartCommandLoop() in this
+                    // process can read stdin again.
+                    clearerr(stdin);
+                    TRACELOG(LOG_DEBUG, "AIADAPTER: stdin thread stopped via CancelSynchronousIo");
+                }
             }
             else
             {
+                // Still blocked in fgets (typically interactive console input).
+                // Do NOT free the adapter or delete the mutex: the thread still
+                // references them. Detach and let the OS reclaim at exit.
                 adapter->commandThread = NULL;   // detach: never CloseHandle a running thread
                 adapter->deferFree = true;       // adapter memory deferred to process exit
                 TRACELOG(LOG_WARNING, "AIADAPTER: stdin thread still blocked; adapter memory deferred to process exit");
@@ -603,6 +633,25 @@ void AIClearLogs(AIAdapter *adapter)
     AI_LOG_UNLOCK(adapter);
 }
 
+// Symbolic name of a structured error code (T7). Kept next to AIGetErrorsJSON
+// so the `errors` command reports the same classification as
+// <<AI_ERROR>> [code:N] and AIGetLastError().
+static const char *AIErrorName(AIErrorCode code)
+{
+    switch (code)
+    {
+        case AI_ERR_NONE:            return "AI_ERR_NONE";
+        case AI_ERR_UNKNOWN_COMMAND: return "AI_ERR_UNKNOWN_COMMAND";
+        case AI_ERR_BAD_ARGUMENT:    return "AI_ERR_BAD_ARGUMENT";
+        case AI_ERR_BUFFER_FULL:     return "AI_ERR_BUFFER_FULL";
+        case AI_ERR_NO_DATA:         return "AI_ERR_NO_DATA";
+        case AI_ERR_BUSY:            return "AI_ERR_BUSY";
+        case AI_ERR_NOT_SUPPORTED:   return "AI_ERR_NOT_SUPPORTED";
+        case AI_ERR_INTERNAL:        return "AI_ERR_INTERNAL";
+        default:                     return "AI_ERR_INTERNAL";
+    }
+}
+
 // Get the most recent error(s) formatted as a JSON string
 const char *AIGetErrorsJSON(AIAdapter *adapter)
 {
@@ -617,6 +666,25 @@ const char *AIGetErrorsJSON(AIAdapter *adapter)
     AI_JSON_APPEND(json, remaining, offset, "[\n");
 
     int first = 1;
+
+    // T7: AI_SET_ERROR writes lastErrorCode/lastErrorMessage, but the ring
+    // below only sees TraceLog messages. Without this bridge, `errors` never
+    // exposed AI_ERR_BUFFER_FULL (or any other structured code) even though
+    // AIGetLastError() and <<AI_ERROR>> [code:N] both knew about it. Emit the
+    // last structured error as a first-class JSON entry at WARNING level:
+    // a dropped scene element is a diagnostic, not an AIClose <<AI_CRASH>>.
+    // Keep headroom so truncation never leaves a half-written object.
+    if ((adapter->lastErrorCode != AI_ERR_NONE) && (remaining - offset >= 1200))
+    {
+        char escapedMsg[1024];
+        AIEscapeJSON(adapter->lastErrorMessage, escapedMsg, sizeof(escapedMsg));
+        AI_JSON_APPEND(json, remaining, offset,
+            "  {\"level\": %d, \"code\": %d, \"error\": \"%s\", \"message\": \"%s\", \"time\": %.3f}",
+            LOG_WARNING, (int)adapter->lastErrorCode, AIErrorName(adapter->lastErrorCode),
+            escapedMsg, adapter->deps->getTime() - adapter->initTime);
+        first = 0;
+    }
+
     for (int i = 0; i < adapter->logCount; i++)
     {
         int idx = AI_LOG_INDEX(adapter, i);

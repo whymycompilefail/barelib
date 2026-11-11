@@ -44,6 +44,15 @@ if (SUPPORT_MODULE_AI_ADAPTER)
                          ${CMAKE_CURRENT_SOURCE_DIR}/scenarios/basic.json
                          $<TARGET_FILE:ai_protocol_harness>)
         set_tests_properties(ai_protocol_scenario PROPERTIES LABELS "gpu")
+
+        # T6 regression: AIClose() must cancel a stdin reader that is still
+        # blocked in fgets() (open pipe), instead of detaching the thread and
+        # deferring the adapter free to process exit.
+        add_test(NAME ai_close_lifecycle
+                 COMMAND ${Python3_EXECUTABLE}
+                         ${CMAKE_CURRENT_SOURCE_DIR}/ai_close_check.py
+                         $<TARGET_FILE:ai_protocol_harness>)
+        set_tests_properties(ai_close_lifecycle PROPERTIES LABELS "gpu")
     endif()
 endif()
 

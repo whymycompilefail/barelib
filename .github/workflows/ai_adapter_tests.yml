@@ -20,8 +20,8 @@ permissions:
 jobs:
   headless:
     # Headless-safe tests only (no GPU/OpenGL context needed): unit tests +
-    # the AI adapter suite (47 assertions). GPU-labeled tests (test_gpu,
-    # ai_protocol_scenario) need a local desktop and are excluded here.
+    # the AI adapter suite. GPU-labeled tests (test_gpu, ai_protocol_scenario,
+    # ai_close_lifecycle) need a local desktop and are excluded here.
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4

@@ -327,12 +327,117 @@ static void TestElementOverflow(void)
     TEST("Scene JSON reports overflow field", strstr(json, "\"overflow\"") != NULL);
     TEST("Scene JSON reports exactly 5 dropped elements", (strstr(json, "\"overflow\": 5") != NULL));
 
+    // T7 (batch 4, resolved): AI_SET_ERROR records a structured code, while
+    // `errors` used to read only the TraceLog ring — two independent channels,
+    // so the real-runtime `errors` command never showed AI_ERR_BUFFER_FULL.
+    // AIGetErrorsJSON() now emits lastErrorCode as a first-class JSON entry.
+    // This suite uses mockDeps (no real log hook), so the live-runtime probe
+    // lives in TestRuntimeErrorVisibility() below.
+    TEST("Overflow records structured last error", AIGetLastError(adapter) == AI_ERR_BUFFER_FULL);
+    const char *errs = AIGetErrorsJSON(adapter);
+    TEST("Errors JSON exposes the structured overflow",
+         strstr(errs, "\"code\": 3") != NULL && strstr(errs, "AI_ERR_BUFFER_FULL") != NULL);
+
     // Overflow resets when the element buffer is cleared (new frame)
     AIClearElements(adapter);
     const char *json2 = AIGetSceneJSON(adapter);
     TEST("Overflow cleared after AIClearElements", strstr(json2, "\"overflow\"") == NULL);
 
     AIClose(adapter);
+}
+
+// T7 (batch 4): real-runtime overflow visibility probe.
+// mockDeps.setTraceLogCallback only RECORDS the call, so this suite's errors
+// channel is always empty. This test swaps in a deps table that really installs
+// the adapter's TraceLog hook, reproducing what a live game sees.
+static void realLogSetTraceLogCallback(TraceLogCallback callback)
+{
+    SetTraceLogCallback(callback);
+}
+
+static void TestRuntimeErrorVisibility(void)
+{
+    TEST_SECTION("Runtime Error Visibility (T7)");
+
+    AIDeps deps = mockDeps;
+    deps.setTraceLogCallback = realLogSetTraceLogCallback;
+    AIAdapter *adapter = AIInitEx(&deps);
+    TEST("Runtime probe adapter created", adapter != NULL);
+    if (adapter == NULL) return;
+
+    // Sanity check: the log hook must actually be installed, otherwise the
+    // whole probe would be vacuous (the batch-1 false negative).
+    TRACELOG(LOG_WARNING, "T7 probe marker");
+    const char *markerErrors = AIGetErrorsJSON(adapter);
+    printf("  INFO: errors after marker = %s\n", markerErrors);
+    TEST("Runtime log hook really installed", strstr(markerErrors, "T7 probe marker") != NULL);
+
+    AIDrawElement elem = { 0 };
+    elem.type = AI_DRAW_RECT;
+    elem.color = (Color){ 255, 0, 0, 255 };
+    for (int i = 0; i < MAX_AI_ELEMENTS + 1; i++) AIRegisterElement(adapter, &elem);
+
+    // Handoff T7 acceptance: fill MAX_AI_ELEMENTS then add exactly one more.
+    const char *scene = AIGetSceneJSON(adapter);
+    TEST("Runtime scene JSON reports exactly 1 dropped element",
+         strstr(scene, "\"overflow\": 1") != NULL);
+    TEST("Runtime overflow records structured code", AIGetLastError(adapter) == AI_ERR_BUFFER_FULL);
+    const char *errors = AIGetErrorsJSON(adapter);
+    printf("  INFO: errors after overflow = %s\n", errors);
+    TEST("Runtime errors JSON mentions the overflow warning", strstr(errors, "Scene element buffer full") != NULL);
+    TEST("Runtime errors JSON exposes AI_ERR_BUFFER_FULL", strstr(errors, "AI_ERR_BUFFER_FULL") != NULL);
+    TEST("Runtime errors JSON exposes structured error code", strstr(errors, "\"code\": 3") != NULL);
+
+    AIClose(adapter);
+}
+
+// T6 (batch 4): repeated adapter lifecycles must not crash, hang, or grow
+// diagnostics without bound. Four of the 100 cycles start the real stdin
+// reader thread to exercise the teardown path; the fully controlled
+// "open pipe" teardown case is covered by tests/ai_close_check.py.
+static int t6DeferWarnings = 0;
+
+static void T6LogCallback(int logLevel, const char *text, va_list args)
+{
+    (void)args;
+    if ((text != NULL) && (logLevel >= LOG_WARNING) &&
+        (strstr(text, "deferred to process exit") != NULL)) t6DeferWarnings++;
+}
+
+static void TestAdapterLifecycleStress(void)
+{
+    TEST_SECTION("Adapter Lifecycle Stress (T6)");
+
+    AIDeps deps = mockDeps;
+    deps.setTraceLogCallback = realLogSetTraceLogCallback;
+
+    t6DeferWarnings = 0;
+    int completed = 0;
+    for (int i = 0; i < 100; i++)
+    {
+        // AIInitEx chains whatever callback is installed now; the adapter
+        // forwards every TRACELOG to it, including AIClose's defer note.
+        SetTraceLogCallback(T6LogCallback);
+        AIAdapter *adapter = AIInitEx(&deps);
+        if (adapter == NULL) break;
+        if ((i % 25) == 0) AIStartCommandLoop(adapter);
+        AIUpdate(adapter);
+        AIClose(adapter);
+        completed++;
+    }
+    SetTraceLogCallback(NULL);
+
+    printf("  INFO: cycles=%d, command-loop starts=4, defer warnings=%d\n",
+           completed, t6DeferWarnings);
+    TEST("100 AIInit/AIClose cycles complete without crash", completed == 100);
+    TEST("Deferred teardown warnings stay bounded", t6DeferWarnings <= 8);
+
+    AIAdapter *probe = AIInitEx(&mockDeps);
+    int logCount = 0;
+    AIGetLogs(probe, &logCount);
+    TEST("Log ring stays bounded after 100 cycles", logCount <= MAX_LOG_ENTRIES);
+    TEST("Fresh adapter starts with no error", AIGetLastError(probe) == AI_ERR_NONE);
+    AIClose(probe);
 }
 
 // Scene JSON generation latency baseline (spec M2, §3.4)
@@ -1252,6 +1357,8 @@ int main(void)
     TestPausedAudioRetention();
     TestProceduralAudio();
     TestSpriteSceneElement();
+    TestRuntimeErrorVisibility();
+    TestAdapterLifecycleStress();
 
     printf("\n========================================\n");
     printf("  Results: %d passed, %d failed out of %d\n",
