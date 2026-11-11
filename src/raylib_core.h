@@ -772,6 +772,8 @@ RLAPI int GetRandomValue(int min, int max);             // Get a random value be
 
 
 // Misc. functions
+// NOTE: TakeScreenshot() may be called inside a frame; it flushes the pending
+//       render batch first. To capture the complete frame, call after EndDrawing().
 RLAPI void TakeScreenshot(const char *fileName);                // Takes a screenshot of current screen (filename extension defines format)
 RLAPI void SetConfigFlags(unsigned int flags);                  // Set up init configuration flags (view FLAGS)
 RLAPI void OpenURL(const char *url);                            // Open URL with default system browser (if available)

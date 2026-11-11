@@ -379,7 +379,7 @@ void DrawTriangle(Vector2 v1, Vector2 v2, Vector2 v3, Color color)
 }
 
 // Draw a triangle using lines
-// NOTE: Vertex must be provided in counter-clockwise order
+// NOTE: Vertex order does not matter (2D-only engine: no backface culling)
 void DrawTriangleLines(Vector2 v1, Vector2 v2, Vector2 v3, Color color)
 {
     rlBegin(RL_LINES);

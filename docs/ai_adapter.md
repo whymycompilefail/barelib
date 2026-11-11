@@ -94,7 +94,7 @@ void AIDrawRectangle(int posX, int posY, int width, int height, Color color)
 | `input <action>` | Inject input (press/click/move/scroll/type) |
 | `pause` | Pause game loop |
 | `resume` | Resume game loop |
-| `step [n]` | Step n frames (default: 1) |
+| `step [n]` | While paused, allow n GameUpdate frames (default: 1) — one real frame each, not an instant jump; requires the host loop below |
 | `state [cat]` | Print state JSON (window/input/time/audio) |
 | `errors` | Print error log JSON |
 
@@ -328,11 +328,42 @@ In `postmessage` mode, `press` and `click` delay the release by one frame (flush
 | Function | Description |
 |----------|-------------|
 | `AIPauseGame(adapter)` | Pause game loop (draw still renders frozen state) |
-| `AIResumeGame(adapter)` | Resume game loop |
-| `AIStepFrame(adapter, n)` | Step n frames while paused |
+| `AIResumeGame(adapter)` | Resume game loop (clears remaining step frames) |
+| `AIStepFrame(adapter, n)` | While paused, permit n GameUpdate frames (sets a counter; no effect when not paused) |
 | `AIGamePaused(adapter)` | Check if paused |
-| `AIGetStepFrames(adapter)` | Remaining step frames |
-| `AIConsumeStepFrame(adapter)` | Decrement step counter (runtime calls this) |
+| `AIGetStepFrames(adapter)` | Remaining step frames (0 = no stepping in progress) |
+| `AIConsumeStepFrame(adapter)` | Decrement the step counter — **the host must call this once per real frame** |
+
+`step N` is not an instant advance. `AIStepFrame()` only sets a counter; each
+subsequent real frame runs one `GameUpdate()` and consumes one unit, so N steps
+take N frames. The engine runtime never calls `AIConsumeStepFrame()` — there is
+no call site in the engine — so a host that omits it leaves the counter stuck
+at N and the game never returns to a frozen state.
+
+Use `pause` before `step N`; `AIStepFrame()` is a no-op while running. Minimal
+host loop (`UpdateGame()` / `DrawScene()` are host callbacks, the rest are real
+public APIs):
+
+```c
+while (!WindowShouldClose())
+{
+    // Counter > 0 permits exactly one update this frame while paused
+    bool mayUpdate = !AIGamePaused(adapter) || (AIGetStepFrames(adapter) > 0);
+    if (mayUpdate) UpdateGame();
+
+    AIConsumeStepFrame(adapter);        // host: exactly once per real frame
+
+    BeginDrawing();
+    DrawScene();                        // always draw, even when frozen
+    EndDrawing();
+
+    AIUpdate(adapter);                 // process queued commands, incl. step N
+}
+```
+
+> Consume **after** deciding/updating, not before: consuming first would turn
+> `step 1` into zero update frames. `AIConsumeStepFrame()` is a no-op when the
+> counter is 0, so calling it unconditionally is safe.
 
 ### Error and log feedback
 

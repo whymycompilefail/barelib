@@ -176,8 +176,10 @@ typedef struct AIDrawElement {
     int frame;                // Current frame source index (AI_DRAW_SPRITE only)
     int frameCount;           // Frames in the sheet (AI_DRAW_SPRITE only)
     int loop;                 // Active tag loops: 0/1 (AI_DRAW_SPRITE only)
-    float scale;              // Integer draw scale (AI_DRAW_SPRITE only)
+    float scale;              // Draw scale, may be < 1 (AI_DRAW_SPRITE only)
     bool flipX;               // Frame mirrored horizontally (AI_DRAW_SPRITE only)
+    int anchor;               // AISpriteAnchor: which point x/y refers to (AI_DRAW_SPRITE only)
+    int fx;                   // AI_SPRITE_FX_* bitmask (AI_DRAW_SPRITE only)
 } AIDrawElement;
 
 // Structure for a captured log/error message
@@ -221,7 +223,13 @@ RLAPI AIAdapter *AIInit(void);
 // Useful for testing without a raylib window — provide mock implementations.
 RLAPI AIAdapter *AIInitEx(AIDeps *deps);
 
-// Close the AI adapter and free all resources
+// Close the AI adapter and free all resources.
+// On Windows the stdin reader thread is stopped with CancelSynchronousIo()
+// (works for pipe/redirected stdin), so a blocked fgets() no longer forces a
+// deferred free. Interactive console stdin is not always cancellable: in that
+// case the thread is detached and the adapter memory is reclaimed at process
+// exit, with a WARNING. To get a full release under an interactive console,
+// close stdin (EOF) before calling AIClose().
 RLAPI void AIClose(AIAdapter *adapter);
 
 // Update the adapter's internal state (call once per frame after EndDrawing)
@@ -466,20 +474,22 @@ RLAPI void AIPauseGame(AIAdapter *adapter);
 // Resume the game loop after a pause.
 RLAPI void AIResumeGame(AIAdapter *adapter);
 
-// Step the game forward by N frames while paused. Each AIStepFrame call allows
-// GameUpdate to run for the specified number of frames, then re-pauses.
+// Allow GameUpdate() to run for N real frames while paused. This only sets a
+// counter: frames advance one per host frame, not instantly. The adapter stays
+// paused; the counter reaching 0 simply stops permitting updates.
 // If the game is not paused, this has no effect.
 RLAPI void AIStepFrame(AIAdapter *adapter, int frames);
 
 // Query whether the game loop is currently paused.
 RLAPI bool AIGamePaused(AIAdapter *adapter);
 
-// Get remaining step frames (decremented each frame by the runtime).
+// Get remaining step frames (decremented by the host via AIConsumeStepFrame).
 // Returns 0 when no stepping is in progress.
 RLAPI int AIGetStepFrames(AIAdapter *adapter);
 
-// Consume one step frame (decrement the counter). Called by the runtime
-// after each GameUpdate when stepping.
+// Consume one step frame (decrement the counter). The host MUST call this
+// once per real frame — the engine runtime never calls it. No-op when the
+// counter is already 0. See docs/ai_adapter.md "Game loop control".
 RLAPI void AIConsumeStepFrame(AIAdapter *adapter);
 
 //----------------------------------------------------------------------------------

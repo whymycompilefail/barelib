@@ -1490,10 +1490,13 @@ void rlglInit(int width, int height)
     glEnable(GL_BLEND);                                     // Enable color blending (required to work with transparencies)
 
     // Init state: Culling
-    // NOTE: All shapes/models triangles are drawn CCW
+    // NOTE: 2D-only engine — backface culling stays OFF. There is no 3D
+    // geometry to hide, and enabling it turns a wrong vertex winding into a
+    // silently missing triangle (no error, no log). The state setup below is
+    // kept for callers that explicitly opt in via rlEnableBackfaceCulling().
     glCullFace(GL_BACK);                                    // Cull the back face (default)
     glFrontFace(GL_CCW);                                    // Front face are defined counter clockwise (default)
-    glEnable(GL_CULL_FACE);                                 // Enable backface culling
+    glDisable(GL_CULL_FACE);                                // 2D-only: winding errors must never drop geometry
 
 #if defined(GRAPHICS_API_OPENGL_11)
     // Init state: Color hints (deprecated in OpenGL 3.0+)

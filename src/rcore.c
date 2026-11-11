@@ -1026,6 +1026,11 @@ void TakeScreenshot(const char *fileName)
     Vector2 scale = { 1.0f, 1.0f };
     if (FLAG_IS_SET(CORE.Window.flags, FLAG_WINDOW_HIGHDPI)) scale = GetWindowScaleDPI();
 
+    // Flush the pending batch before reading the framebuffer: this function may
+    // be called inside BeginDrawing()/EndDrawing(), where draw calls issued so
+    // far this frame have not been submitted yet (would yield an all-black PNG).
+    rlDrawRenderBatchActive();
+
     unsigned char *imgData = rlReadScreenPixels((int)((float)CORE.Window.render.width*scale.x), (int)((float)CORE.Window.render.height*scale.y));
     Image image = { imgData, (int)((float)CORE.Window.render.width*scale.x), (int)((float)CORE.Window.render.height*scale.y), 1, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8 };
 

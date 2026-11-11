@@ -18,6 +18,8 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <stdarg.h>
+#include <math.h>
 
 //----------------------------------------------------------------------------------
 // Test Framework Macros
@@ -321,6 +323,99 @@ static void TestScreenCapture(void)
         TEST("Screenshot file size > 0", len > 0);
         FileRemove("test_screenshot.png");
     }
+}
+
+//----------------------------------------------------------------------------------
+// Test: Triangle Winding (engine fix T1)
+// A 2D-only engine has no use for backface culling. rlglInit() used to enable
+// GL_CULL_FACE with CCW front faces, so one of two triangles with opposite
+// vertex order was silently dropped: no log, no error, just a missing sprite.
+//----------------------------------------------------------------------------------
+
+static void TestTriangleWinding(void)
+{
+    TEST_SECTION("Triangle Winding (2D must not cull)");
+
+    RenderTexture2D rt = LoadRenderTexture(32, 16);
+    TEST("Winding RT valid", IsRenderTextureValid(rt));
+
+    BeginTextureMode(rt);
+    ClearBackground(BLACK);
+
+    // Same geometry, opposite vertex order (v2/v3 swapped), placed in the two
+    // halves of the target so each can be sampled separately.
+    // cross < 0: (2,2) (2,14) (14,8) ; cross > 0: (18,2) (30,8) (18,14)
+    DrawTriangle((Vector2){ 2, 2 }, (Vector2){ 2, 14 }, (Vector2){ 14, 8 }, RED);
+    DrawTriangle((Vector2){ 18, 2 }, (Vector2){ 30, 8 }, (Vector2){ 18, 14 }, BLUE);
+    EndTextureMode();
+
+    Image back = LoadImageFromTexture(rt.texture);
+    TEST("Winding readback valid", IsImageValid(back));
+    if (IsImageValid(back))
+    {
+        // NOTE: LoadImageFromTexture flips Y (canvas y -> image 15-y). Row 7
+        // and row 8 both lie inside these triangles, so the assertion is
+        // orientation-independent on drivers that do not flip.
+        Color triA = GetImageColor(back, 6, 7);
+        Color triB = GetImageColor(back, 22, 7);
+        TEST("cross<0 triangle is visible", triA.r > 100 && triA.g < 80 && triA.b < 80);
+        TEST("cross>0 triangle is visible", triB.b > 100 && triB.r < 80);
+        UnloadImage(back);
+    }
+    UnloadRenderTexture(rt);
+}
+
+//----------------------------------------------------------------------------------
+// Test: In-frame TakeScreenshot (engine fix T2)
+// Calling TakeScreenshot() between BeginDrawing()/EndDrawing() used to read
+// the framebuffer before the pending render batch was submitted, producing
+// an all-black PNG.
+//----------------------------------------------------------------------------------
+
+static void TestInFrameScreenshot(void)
+{
+    TEST_SECTION("In-frame TakeScreenshot (batch flush)");
+
+    const char *path = "shot_probe.png";
+
+    BeginDrawing();
+    ClearBackground(BLACK);
+    DrawRectangle(0, 0, 16, 16, RED);
+    TakeScreenshot(path);          // must flush the pending batch internally
+    EndDrawing();
+
+    bool exists = FileExists(path);
+    TEST("In-frame screenshot file exists", exists);
+    Image shot = { 0 };
+    if (exists)
+    {
+        shot = LoadImage(path);
+        TEST("In-frame screenshot loads", IsImageValid(shot));
+    }
+
+    if (IsImageValid(shot))
+    {
+        // rlReadScreenPixels returns bottom-up rows, so the 16x16 red rect may
+        // land at the bottom of the image. Count red pixels over the entire
+        // image instead of sampling a fixed (8,8): an all-black screenshot
+        // still fails hard, while the assertion is flip-independent.
+        int redPixels = 0;
+        int blackPixels = 0;
+        for (int y = 0; y < shot.height; y++)
+        {
+            for (int x = 0; x < shot.width; x++)
+            {
+                Color c = GetImageColor(shot, x, y);
+                if (c.r > 100 && c.g < 80 && c.b < 80) redPixels++;
+                else if (c.r < 20 && c.g < 20 && c.b < 20) blackPixels++;
+            }
+        }
+        TEST("In-frame screenshot contains the drawn red rect", redPixels >= 64);
+        TEST("In-frame screenshot keeps the black background", blackPixels > redPixels);
+        UnloadImage(shot);
+    }
+
+    if (exists) FileRemove(path);
 }
 
 //----------------------------------------------------------------------------------
@@ -823,6 +918,8 @@ int main(void)
     TestRenderTexture();
     TestShapeDrawing();
     TestScreenCapture();
+    TestTriangleWinding();
+    TestInFrameScreenshot();
     TestDrawingModes();
     TestCamera2D();
     TestDrawObserver();
