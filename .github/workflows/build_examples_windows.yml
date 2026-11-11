@@ -8,7 +8,7 @@ on:
       - 'examples/**'
       - '.github/workflows/windows_examples.yml'
   pull_request:
-    branches: [ master ]
+    branches: [ main, master ]
     paths:
       - 'src/**'
       - 'examples/**'
